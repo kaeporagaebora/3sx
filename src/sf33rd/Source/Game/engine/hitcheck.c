@@ -57,12 +57,125 @@ void make_red_blocking_time(s16 id, s16 ix, s16 num) {
     }
 }
 
-void hit_check_main_process() { // 🟢
+/// Port-only: guard directions (bit 0 = forward, bit 1 = backward) of every attack whose hitbox
+/// overlaps each player's hurtboxes this frame. Rebuilt every frame by `record_cross_attack_dirs()`.
+static s8 cross_attack_dirs[2];
+
+/// Port-only: `attack_hit_check()` only registers one hit per defender per frame, so an attack from
+/// the other side of a same-frame unblockable connects on a later frame. The CPU rewrites its guard
+/// lever every frame (even during guard freeze), so it can turn around and block it, which a human
+/// can't. Recording every overlapping attack lets the guard checks refuse to guard for the CPU when
+/// it is attacked from both sides on the same frame. The filters below mirror `attack_hit_check()`.
+static void record_cross_attack_dirs() {
+    WORK* mad;
+    WORK* sad;
+    const s16* mh;
+    const s16* dh[8];
+    s16 si;
+    s16 mi;
+    s16 lp;
+    s16 lp2;
+    s8 dir;
+
+    cross_attack_dirs[0] = cross_attack_dirs[1] = 0;
+
+    for (si = 0; si < hpq_in; si++) {
+        sad = q_hit_push[si];
+
+        if (sad->work_id != 1 || sad->id > 1 || (hs[si].flag.results & 0x1101)) {
+            continue;
+        }
+
+        for (lp = 0; lp < 4; lp++) {
+            dh[lp] = sad->h_bod->body_dm[lp];
+            dh[lp + 4] = sad->h_han->hand_dm[lp];
+        }
+
+        for (mi = 0; mi < hpq_in; mi++) {
+            if (mi == si || (hs[mi].flag.results & 0x1110)) {
+                continue;
+            }
+
+            mad = q_hit_push[mi];
+
+            if (mad->cg_ja.atix == 0 || mad->att_hit_ok == 0) {
+                continue;
+            }
+
+            if (!(mad->att.dipsw & 2) || !(sad->att.dipsw & 2)) {
+                if ((mad->work_id != 1 && mad->work_id != 8) || !(sad->att.dipsw & 2)) {
+                    if (!(mad->vs_id & sad->work_id)) {
+                        continue;
+                    }
+                }
+            }
+
+            if (mad->work_id != 1 && ((WORK_Other*)mad)->master_id == sad->id) {
+                continue;
+            }
+
+            dir = get_guard_direction(mad, sad);
+
+            if (dir != 1 && dir != 2) {
+                continue; // Blockable from either side, so it can't make a cross-up
+            }
+
+            for (lp = 0; lp < 4; lp++) {
+                mh = mad->h_att->att_box[lp];
+
+                if (mh[1] == 0) {
+                    continue;
+                }
+
+                for (lp2 = 0; lp2 < 8; lp2++) {
+                    if (dh[lp2][1] == 0) {
+                        continue;
+                    }
+
+                    if (lp2 > 3) {
+                        if (!((mad->rl_flag + sad->rl_flag) & 1)) {
+                            if (mad->rl_flag ? (mad->xyz[0].disp.pos > sad->xyz[0].disp.pos)
+                                             : (mad->xyz[0].disp.pos < sad->xyz[0].disp.pos)) {
+                                continue;
+                            }
+                        }
+
+                        if ((mad->att.dipsw & 4) && sad->cg_ja.bhix == 0) {
+                            continue;
+                        }
+                    }
+
+                    if (hit_check_subroutine(mad, sad, mh, dh[lp2]) > 0) {
+                        cross_attack_dirs[sad->id] |= dir;
+                        goto next_attacker;
+                    }
+                }
+            }
+
+        next_attacker:
+            continue;
+        }
+    }
+}
+
+/// Port-only: true if a CPU-controlled defender is being attacked from both sides this frame.
+static bool cpu_cannot_guard_cross_up(PLW* ds) {
+    return ds->wu.operator == 0 && ds->wu.id <= 1 && cross_attack_dirs[ds->wu.id] == 3;
+}
+
+void hit_check_main_process() { // 🟡
+    // The cross-up pre-pass is port-only and is skipped in arcade-balance mode.
     aiuchi_flag = 0;
 
     if (hpq_in > 1) {
         if (ca_check_flag) {
             catch_hit_check();
+        }
+
+        if (ArcadeBalance_IsEnabled()) {
+            cross_attack_dirs[0] = cross_attack_dirs[1] = 0;
+        } else {
+            record_cross_attack_dirs();
         }
 
         attack_hit_check();
@@ -1150,6 +1263,10 @@ s32 defense_sky_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
         return 2;
     }
 
+    if (cpu_cannot_guard_cross_up(ds)) {
+        return 2;
+    }
+
     if (!ds->auto_guard && !ags) {
         if ((ds->spmv_ng_flag & DIP_ABSOLUTE_GUARD_DISABLED) || !just_now) {
             if (!(ds->saishin_lvdir & gddir)) {
@@ -1478,6 +1595,10 @@ s32 defense_ground_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
     }
 
     if (ds->spmv_ng_flag & DIP_GUARD_DISABLED) {
+        return 2;
+    }
+
+    if (cpu_cannot_guard_cross_up(ds)) {
         return 2;
     }
 
