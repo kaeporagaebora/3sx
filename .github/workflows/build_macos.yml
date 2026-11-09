@@ -21,7 +21,7 @@ jobs:
                 key: ${{ runner.os }}-deps-${{ hashFiles('build-deps.sh') }}
 
           - name: Install dependencies
-            run: sh build-deps.sh
+            run: bash build-deps.sh
 
           - name: Build for macOS
             run: |

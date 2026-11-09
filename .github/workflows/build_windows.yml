@@ -34,7 +34,7 @@ jobs:
                 key: ${{ runner.os }}-deps-${{ hashFiles('build-deps.sh') }}
 
           - name: Build dependencies
-            run: sh build-deps.sh
+            run: bash build-deps.sh
 
           - name: Build for Windows
             run: |

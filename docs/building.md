@@ -43,7 +43,7 @@ You should be able to build the project with just Xcode Command Line Tools.
 1. Build dependencies
 
     ```bash
-    sh build-deps.sh
+    bash build-deps.sh
     ```
 
 2. Build the game
