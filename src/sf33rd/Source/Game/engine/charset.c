@@ -1065,9 +1065,22 @@ s32 comm_rapp(WORK* wk, UNK11* ctc) {
     return 1;
 }
 
+// Ken SA2 (Shinryuken): automatically satisfy both kick-mash checks so its
+// animation follows the maximum-hit sequence without repeated button presses.
+static bool ken_sa2_auto_mash(const WORK* wk) {
+    if (wk->work_id != 1) {
+        return false;
+    }
+
+    const PLW* player = (const PLW*)wk;
+    // pB_cmd_21 selects attack routine 20; Super Art indices are zero-based.
+    return player->player_number == CHAR_KEN && wk->routine_no[1] == 4 && wk->routine_no[2] == 20 &&
+           player->sa != NULL && player->sa->kind_of_arts == 1;
+}
+
 s32 comm_rapk(WORK* wk, UNK11* ctc) {
     if (wk->work_id == 1) {
-        if (wcp[wk->id].waza_flag[11]) {
+        if (ken_sa2_auto_mash(wk) || wcp[wk->id].waza_flag[11]) {
             setup_comm_back(wk);
             set_char_move_init2(wk, ctc->koc, ctc->ix, ctc->pat, 1);
             return 0;
@@ -1454,7 +1467,7 @@ s32 comm_rapp2(WORK* wk, UNK11* ctc) {
 
 s32 comm_rapk2(WORK* wk, UNK11* ctc) {
     if (wk->work_id == 1) {
-        if (wcp[wk->id].waza_flag[10]) {
+        if (ken_sa2_auto_mash(wk) || wcp[wk->id].waza_flag[10]) {
             setup_comm_back(wk);
             set_char_move_init2(wk, ctc->koc, ctc->ix, ctc->pat, 1);
             return 0;
