@@ -18,9 +18,12 @@
 #include "sf33rd/Source/Game/rendering/dc_ghost.h"
 #include "sf33rd/Source/Game/rendering/mtrans.h"
 #include "sf33rd/Source/Game/stage/bg_data.h"
+#include "sf33rd/Source/Game/stage/bg_sub.h"
 #include "sf33rd/Source/Game/system/ramcnt.h"
 #include "sf33rd/Source/Game/system/work_sys.h"
 #include "structs.h"
+
+#include <SDL3/SDL.h>
 
 Vertex scrDrawPos[4];
 ColoredVertex bgpoly[4];
@@ -46,10 +49,24 @@ s32 bgPalCodeOffset[8];
 BG bg_w;
 RW_DATA rw_dat[20];
 
-static void bgRWWorkUpdate();
-static void bgDrawOneScreen(s32 bgnum, s32 gixbase, s32* xx, s32* yy, s32 /* unused */, s32 ofsPal,
-                            PPGDataList* curDataList);
+/// Whether the layers hold the area's own tilemap, so that `bg_layer_frames_tbl` applies to them.
+/// Other screens (VS, results) load their tilemaps into the same layers without changing `bg_w.bg_index`
+static bool bg_layer_frames_active;
+
+static void bgRWWorkUpdate(s32 bgnm);
+
+static void bgDrawOneScreen(
+    s32 bgnum, s32 gixbase, const s32 xx[2], const s32 yy[2], s32 ofsPal, PPGDataList* curDataList
+);
+
 static void bgDrawOneChip(s32 x, s32 y, s32 xs, s32 ys, s32 gbix, u32 vtxCol, s32 ofsPal);
+static void bgDrawOuterChips(s32 bgnum, const s32 yy[2], s32 ofsPal, PPGDataList* curDataList);
+
+static void bgDrawLineScroll(
+    u8 bgnm, s32 gixbase, const f32 left_right[2], const s32 yy[2], s32 ofsPal, PPGDataList* curDataList
+);
+
+static void bgClipChipColumns(s32 bgnum, s32 xx[2], f32 left, f32 right);
 static void bgAkebonoDraw();
 static void ppgCalScrPosition(s32 x, s32 y, s32 xs, s32 ys);
 
@@ -74,8 +91,8 @@ void Bg_Kakikae_Set() {
     const bgrw_data_tbl_elem* rwtbl_ptr;
     s8 rw;
 
-    switch (bg_w.stage) {
-    case 3:
+    switch (bg_w.bg_index) {
+    case AREA_3S_YUN:
         tokusyu_stage = 1;
         stage_flash = 0;
         stage_ftimer = 0;
@@ -89,7 +106,7 @@ void Bg_Kakikae_Set() {
         rw3col_ptr = (u32*)rw30col;
 
         for (i = 0; i < 4; i++) {
-            rw = bgrw_on[bg_w.stage][i];
+            rw = bgrw_on[bg_w.bg_index][i];
 
             rwtbl_ptr = &bgrw_data_tbl[rw];
             rw_dat[i + 1].bg_num = rwtbl_ptr->bg_num;
@@ -100,25 +117,25 @@ void Bg_Kakikae_Set() {
         }
         break;
 
-    case 10:
+    case AREA_3S_YANG:
         tokusyu_stage = 2;
         yang_ix = 0;
         yang_ix_plus = 0;
         yang_timer = 4;
         break;
 
-    case 19:
+    case AREA_3S_REMY:
         tokusyu_stage = 3;
         stage_flash = 0;
         stage_ftimer = 2;
-        rw_dat->rwd_ptr = rw_dat->brw_ptr = (s16*)rw190;
+        rw_dat->rwd_ptr = rw_dat->brw_ptr = (s16*)rw200;
         rw_dat->rw_cnt = 2;
 
         for (i = 0; i < 4; i++) {
-            rw_gbix[i] = stage19rw_data_tbl[i];
+            rw_gbix[i] = stage20rw_data_tbl[i];
         }
 
-        rw = bgrw_on[bg_w.stage][0];
+        rw = bgrw_on[bg_w.bg_index][0];
 
         rwtbl_ptr = &bgrw_data_tbl[rw];
         rw_dat[1].bg_num = rwtbl_ptr->bg_num;
@@ -129,7 +146,7 @@ void Bg_Kakikae_Set() {
         break;
 
     default:
-        if (bg_w.stage == 7) {
+        if (bg_w.bg_index == AREA_3S_IBUKI) {
             tokusyu_stage = 4;
         } else {
             tokusyu_stage = 0;
@@ -142,7 +159,7 @@ void Bg_Kakikae_Set() {
         }
 
         for (i = 0; i < 8; i++) {
-            rw = bgrw_on[bg_w.stage][i];
+            rw = bgrw_on[bg_w.bg_index][i];
 
             if (rw == -1) {
                 break;
@@ -217,6 +234,7 @@ void Bg_Close() {
 
     tokusyu_stage = 0;
     rw_num = 0;
+    bg_layer_frames_active = false;
 
     for (i = 0; i < 3; i++) {
         ppgReleaseTextureHandle(&ppgBgTex[i], -1);
@@ -261,24 +279,25 @@ void Bg_Texture_Load_EX() {
     }
 
     ending_flag = 0;
+    bg_layer_frames_active = true;
 
     for (stg = 0; stg < 3; stg++) {
-        if (stage_bgw_number[bg_w.stage][stg] != 0) {
+        if (stage_bgw_number[bg_w.bg_index][stg] != 0) {
             break;
         }
     }
 
-    for (i = 0; i < use_real_scr[bg_w.stage]; i++) {
-        scr_bcm[stg + i] = bg_map_tbl[bg_w.stage][i];
+    for (i = 0; i < use_real_scr[bg_w.bg_index]; i++) {
+        scr_bcm[stg + i] = bg_map_tbl[bg_w.bg_index][i];
     }
 
     for (i = 0; i < 3; i++) {
-        if (stage_bgw_number[bg_w.stage][i] > 0) {
+        if (stage_bgw_number[bg_w.bg_index][i] > 0) {
             Bg_On_R(1 << i);
         }
     }
 
-    if (bg_w.stage == 7) {
+    if (bg_w.bg_index == AREA_3S_IBUKI) {
         Bg_On_R(4);
     }
 
@@ -289,7 +308,7 @@ void Bg_Texture_Load_EX() {
     shift = 0x18;
 
     for (j = 0; j < 3; j++, shift -= 8, assign1 = pmask >>= 8) {
-        prio = stage_priority[bg_w.stage];
+        prio = stage_priority[bg_w.bg_index];
         prio &= pmask;
         prio >>= shift;
         bg_priority[j] = prio;
@@ -299,7 +318,7 @@ void Bg_Texture_Load_EX() {
     accnum = 0;
 
     for (j = 0; j < bg_w.scrno; j++, assign3 = stg++) {
-        tgbix = bgtex_stage_gbix[bg_w.stage][j];
+        tgbix = bgtex_stage_gbix[bg_w.bg_index][j];
         mask = 0x80000000;
         ppgSetupCurrentDataList(&ppgBgList[stg]);
         ppgSetupTexChunk_1st(NULL, loadAdrs, loadSize, (stg * 64) + 0x84, 32, 0, 0);
@@ -313,7 +332,7 @@ void Bg_Texture_Load_EX() {
         }
     }
 
-    x = rewrite_scr[bg_w.stage];
+    x = rewrite_scr[bg_w.bg_index];
 
     if (x) {
         ppgSetupCurrentDataList(&ppgRwBgList);
@@ -326,7 +345,7 @@ void Bg_Texture_Load_EX() {
         }
     }
 
-    if (bg_w.stage == 7) {
+    if (bg_w.bg_index == AREA_3S_IBUKI) {
         ppgSetupCurrentDataList(&ppgAkaneList);
         ppgSetupPalChunk(NULL, loadAdrs, loadSize, 0, 0, 1);
         ppgSetupTexChunk_1st(NULL, loadAdrs, loadSize, 0, 3, 0, 0);
@@ -340,7 +359,7 @@ void Bg_Texture_Load_EX() {
         ppgSourceDataReleased(&ppgAkaneList);
     }
 
-    if (bg_w.stage != 20 && bg_w.stage != 21) {
+    if (bg_w.stage != STAGE_3S_BONUS_CAR && bg_w.stage != STAGE_3S_BONUS_BALLS) {
         akeKey = Search_ramcnt_type(0x1F);
         akeSize = Get_size_data_ramcnt_key(akeKey);
         akeAdrs = Get_ramcnt_pointer(akeKey);
@@ -376,6 +395,7 @@ void Bg_Texture_Load2(u8 type) {
     ending_flag = 0;
     tokusyu_stage = 0;
     rw_num = 0;
+    bg_layer_frames_active = false;
 
     for (i = 0; i < 4; i++) {
         rw_bg_flag[i] = 0;
@@ -552,52 +572,43 @@ void scr_trans(u8 bgnm) {
     s32 palOffset;
     u32 vtxColor;
     s32 suzi_pos;
+    f32 left_right[2];
 
-    njUnitMatrix(0);
-    njScale(0, 1.0f, -1.0f, 1.0f);
-    njTranslate(0, 0.0f, -1024.0f, 0.0f);
-    njTranslate(0, (s16)bg_prm[bgnm].bg_h_shift, (s16)bg_prm[bgnm].bg_v_shift, 0.0f);
-    njScale(0, 1.0f, -1.0f, 1.0f);
-    njTranslate(0, 0.0f, -224.0f, 0.0f);
-    njScale(0, 1.0f / scr_sc, 1.0f / scr_sc, 1.0f);
+    const bool line_scroll = (ending_flag == 0) && (bgnm < 3) && (bg_w.bgw[bgnm].zuubun != 0);
+
+    njUnitMatrix(NULL);
+    njScale(NULL, 1.0f, -1.0f, 1.0f);
+    njTranslate(NULL, 0.0f, -1024.0f, 0.0f);
+    njTranslate(NULL, (s16)bg_prm[bgnm].bg_h_shift, (s16)bg_prm[bgnm].bg_v_shift, 0.0f);
+    njScale(NULL, 1.0f, -1.0f, 1.0f);
+    njTranslate(NULL, 0.0f, -224.0f, 0.0f);
+    njScale(NULL, 1.0f / scr_sc, 1.0f / scr_sc, 1.0f);
     point[0].x = 0.0f;
     point[0].y = 0.0f;
-    point[0].z = 00.f;
+    point[0].z = 0.0f;
     point[1].x = 648.0f;
     point[1].y = 488.0f;
     point[1].z = 0.0f;
-    njCalcPoints(0, &point[0], &point[0], 2);
-    xx[0] = ((s32)point[0].x) & ~0x7F;
-    yy[0] = ((s32)point[0].y) & ~0x7F;
-    xx[1] = ((s32)point[1].x + 0x7F) & ~0x7F;
+    njCalcPoints(NULL, point, point, SDL_arraysize(point));
+    left_right[0] = point[0].x;
+    left_right[1] = point[1].x;
+    bgClipChipColumns(bgnm, xx, left_right[0], left_right[1]);
+    yy[0] = (s32)point[0].y & ~0x7F;
     yy[1] = ((s32)point[1].y + 0x7F) & ~0x7F;
+    yy[0] = SDL_clamp(yy[0], 0, 1023);
+    yy[1] = SDL_clamp(yy[1], 0, 1023);
 
-    for (x = 0; x < 2; x++) {
-        if (xx[x] < 0) {
-            xx[x] = 0;
-        }
-
-        if (0x3FF < xx[x]) {
-            xx[x] = 0x3FF;
-        }
-
-        if (yy[x] < 0) {
-            yy[x] = 0;
-        }
-
-        if (0x3FF < yy[x]) {
-            yy[x] = 0x3FF;
-        }
-    }
-
-    njUnitMatrix(0);
-    njScale(0, scr_sc, scr_sc, 1.0);
-    njTranslate(0, 0, 224.0, 0);
-    njScale(0, 1.0, -1.0, 1.0);
-    njTranslate(0, (s16)-bg_prm[bgnm].bg_h_shift, (s16)-bg_prm[bgnm].bg_v_shift, 0);
+    njUnitMatrix(NULL);
+    njScale(NULL, scr_sc, scr_sc, 1.0);
+    njTranslate(NULL, 0, 224.0, 0);
+    njScale(NULL, 1.0, -1.0, 1.0);
+    njTranslate(NULL, (s16)-bg_prm[bgnm].bg_h_shift, (s16)-bg_prm[bgnm].bg_v_shift, 0);
     njGetMatrix(&BgMATRIX[bgnm + 1]);
-    njTranslate(0, 0, 1024.0, PrioBase[bg_priority[bgnm]]);
-    njScale(0, 1.0, -1.0, 1.0);
+
+    if (!line_scroll) {
+        njTranslate(NULL, 0, 1024.0, PrioBase[bg_priority[bgnm]]);
+        njScale(NULL, 1.0, -1.0, 1.0);
+    }
 
     palOffset = bgPalCodeOffset[bgnm];
 
@@ -834,22 +845,22 @@ void scr_trans(u8 bgnm) {
                     switch (stage_flash) {
                     case 0:
                     case 1:
-                        rw_dat[0].rwd_ptr = rw_dat[0].brw_ptr = rw191;
+                        rw_dat[0].rwd_ptr = rw_dat[0].brw_ptr = rw201;
                         rw_dat[0].rw_cnt = 1;
-                        stage_ftimer = stage19_loop_tbl2[stage_ftimer];
+                        stage_ftimer = stage20_loop_tbl2[stage_ftimer];
                         break;
 
                     case 2:
                     case 3:
-                        rw_dat[0].rwd_ptr = rw_dat[0].brw_ptr = rw192;
+                        rw_dat[0].rwd_ptr = rw_dat[0].brw_ptr = rw202;
                         rw_dat[0].rw_cnt = 1;
-                        stage_ftimer = stage19_loop_tbl2[stage_ftimer];
+                        stage_ftimer = stage20_loop_tbl2[stage_ftimer];
                         break;
 
                     default:
-                        rw_dat[0].rwd_ptr = rw_dat[0].brw_ptr = rw190;
+                        rw_dat[0].rwd_ptr = rw_dat[0].brw_ptr = rw200;
                         rw_dat[0].rw_cnt = 2;
-                        stage_ftimer = stage19_loop_tbl1[stage_ftimer];
+                        stage_ftimer = stage20_loop_tbl1[stage_ftimer];
                         break;
                     }
                 } else {
@@ -991,7 +1002,7 @@ void scr_trans(u8 bgnm) {
         break;
 
     case 7:
-        bgDrawOneScreen(bgnm, global_index, &xx[0], &yy[0], -1, palOffset, curDataList);
+        bgDrawOneScreen(bgnm, global_index, xx, yy, palOffset, curDataList);
 
         if (EXE_flag != 0) {
             break;
@@ -1002,7 +1013,7 @@ void scr_trans(u8 bgnm) {
         }
 
         if (rw_bg_flag[bgnm] && rw_num) {
-            bgRWWorkUpdate();
+            bgRWWorkUpdate(-1);
         }
 
         scr_calc2(bgnm);
@@ -1027,20 +1038,33 @@ void scr_trans(u8 bgnm) {
         /* fallthrough */
 
     default:
-        bgDrawOneScreen(bgnm, global_index, &xx[0], &yy[0], -1, palOffset, curDataList);
+        if (line_scroll) {
+            bgDrawLineScroll(bgnm, global_index, left_right, yy, palOffset, curDataList);
+        } else {
+            bgDrawOneScreen(bgnm, global_index, xx, yy, palOffset, curDataList);
+
+            if (ending_flag == 0) {
+                bgDrawOuterChips(bgnm, yy, palOffset, curDataList);
+            }
+        }
 
         if (EXE_flag == 0 && Game_pause == 0 && rw_bg_flag[bgnm] && rw_num) {
-            bgRWWorkUpdate();
+            bgRWWorkUpdate(bgnm);
         }
 
         break;
     }
 }
 
-void bgRWWorkUpdate() {
+/// Advances the rewrites of a layer, or all rewrites if `bgnm` is -1.
+void bgRWWorkUpdate(s32 bgnm) {
     s32 i;
 
     for (i = 0; i < rw_num; i++) {
+        if (bgnm != -1 && rw_dat[i].bg_num != bgnm) {
+            continue;
+        }
+
         rw_dat[i].rw_cnt--;
 
         if (rw_dat[i].rw_cnt == 0) {
@@ -1056,14 +1080,84 @@ void bgRWWorkUpdate() {
     }
 }
 
-void bgDrawOneScreen(s32 bgnum, s32 gixbase, s32* xx, s32* yy, s32 /* unused */, s32 ofsPal, PPGDataList* curDataList) {
+/// Draws the parts of the area's chips outside the layer's plane that are in rows `yy[0]` to `yy[1]`. They are rewrite
+/// chips.
+static void bgDrawOuterChips(s32 bgnum, const s32 yy[2], s32 ofsPal, PPGDataList* curDataList) {
+    const bg_outer_chip_elem* chip = bg_outer_chip_tbl[bg_w.bg_index];
+    s32 top;
+    s32 bottom;
+
+    if (chip == NULL) {
+        return;
+    }
+
+    ppgSetupCurrentDataList(&ppgRwBgList);
+
+    for (; chip->gbix != -1; chip++) {
+        if (chip->bg_num != bgnum) {
+            continue;
+        }
+
+        top = (chip->y > yy[0]) ? chip->y : yy[0];
+        bottom = (chip->y + 128 < yy[1]) ? chip->y + 128 : yy[1];
+
+        if (top < bottom) {
+            bgDrawOneChip(chip->x, top, 128, bottom - top, chip->gbix, -1, ofsPal);
+        }
+    }
+
+    ppgSetupCurrentDataList(curDataList);
+}
+
+/// Replaces `gbix` with the chip that the current frames of the area's `bg_layer_frames_tbl` show there.
+/// @return Whether an animation replaced the chip
+static bool bgLayerFrameChip(s32 bgnum, s32 gixbase, s32* gbix) {
+    const bg_layer_frames_elem* frames = &bg_layer_frames_tbl[bg_w.bg_index];
+    const s32 chip = *gbix - gixbase;
+
+    if (!bg_layer_frames_active || ending_flag != 0 || chip < 32) {
+        return false;
+    }
+
+    for (int i = 0; i < BG_LAYER_ANIMS; i++) {
+        const bg_layer_anim_elem* anim = &frames->anims[i];
+
+        if (anim->chips == NULL || anim->bg_num != bgnum) {
+            continue;
+        }
+
+        const s16 frame_gbix = anim->chips[bg_w.layer_frame[i]][chip - 32];
+
+        if (frame_gbix != *gbix) {
+            *gbix = frame_gbix;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void bgDrawOneScreen(
+    s32 bgnum, s32 gixbase, const s32 xx[2], const s32 yy[2], s32 ofsPal, PPGDataList* curDataList
+) {
     s32 i, x, y, gbix;
+    s32 bottom;
 
-    for (y = yy[0]; y < yy[1]; y += 128) {
+    for (y = yy[0]; y < yy[1]; y = bottom) {
+        bottom = (y & ~0x7F) + 128;
+
+        if (bottom > yy[1]) {
+            bottom = yy[1];
+        }
+
         for (x = xx[0]; x < xx[1]; x += 128) {
-            gbix = ((y >> 7) << 3) + (x >> 7) + gixbase;
+            gbix = ((y >> 7) << 3) + ((x & 0x3FF) >> 7) + gixbase;
 
-            if (rw_bg_flag[bgnum] && rw_num) {
+            if (bgLayerFrameChip(bgnum, gixbase, &gbix)) {
+                if (!(ppgCheckTextureNumber(0, gbix))) {
+                    ppgSetupCurrentDataList(&ppgRwBgList);
+                }
+            } else if (rw_bg_flag[bgnum] && rw_num) {
                 for (i = 0; i < rw_num; i++) {
                     if (bgnum == rw_dat[i].bg_num && gbix == rw_dat[i].rwgbix) {
                         gbix = rw_dat[i].gbix;
@@ -1075,9 +1169,51 @@ void bgDrawOneScreen(s32 bgnum, s32 gixbase, s32* xx, s32* yy, s32 /* unused */,
                 }
             }
 
-            bgDrawOneChip(x, y, 128, 128, gbix, -1, ofsPal);
+            bgDrawOneChip(x, y, 128, bottom - y, gbix, -1, ofsPal);
             ppgSetupCurrentDataList(curDataList);
         }
+    }
+}
+
+/// Whether the layer repeats its plane horizontally every 1024 pixels
+static bool bgRepeatsX(s32 bgnum) {
+    return ending_flag == 0 && (bg_repeat_x_tbl[bg_w.bg_index] & (1 << bgnum));
+}
+
+/// Columns of chips that cover the tilemap from `left` to `right`
+static void bgClipChipColumns(s32 bgnum, s32 xx[2], f32 left, f32 right) {
+    xx[0] = ((s32)SDL_floorf(left)) & ~0x7F;
+    xx[1] = ((s32)right + 0x7F) & ~0x7F;
+
+    if (bgRepeatsX(bgnum)) {
+        return;
+    }
+
+    xx[0] = SDL_clamp(xx[0], 0, 1023);
+    xx[1] = SDL_clamp(xx[1], 0, 1023);
+}
+
+static void bgDrawLineScroll(
+    u8 bgnm, s32 gixbase, const f32 left_right[2], const s32 yy[2], s32 ofsPal, PPGDataList* curDataList
+) {
+    s32 strip[2];
+
+    for (strip[0] = yy[0]; strip[0] < yy[1]; strip[0] = strip[1]) {
+        const s16 scroll = bg_suzi_line_scroll(bgnm, strip[0]);
+        strip[1] = strip[0] + 1;
+
+        while ((strip[1] < yy[1]) && (bg_suzi_line_scroll(bgnm, strip[1]) == scroll)) {
+            strip[1] += 1;
+        }
+
+        njSetMatrix(NULL, &BgMATRIX[bgnm + 1]);
+        njTranslate(NULL, -scroll, 1024.0, PrioBase[bg_priority[bgnm]]);
+        njScale(NULL, 1.0, -1.0, 1.0);
+
+        s32 xx[2];
+        bgClipChipColumns(bgnm, xx, left_right[0] + scroll, left_right[1] + scroll);
+        bgDrawOneScreen(bgnm, gixbase, xx, strip, ofsPal, curDataList);
+        bgDrawOuterChips(bgnm, strip, ofsPal, curDataList);
     }
 }
 
@@ -1085,7 +1221,7 @@ void bgDrawOneChip(s32 x, s32 y, s32 xs, s32 ys, s32 gbix, u32 vtxCol, s32 ofsPa
     if ((No_Trans == 0) && ppgCheckTextureNumber(0, gbix)) {
         ppgCalScrPosition(x, y, xs, ys);
 
-        if ((scrDrawPos->x >= 384.0f) || (scrDrawPos[3].x < 0.0f) || (scrDrawPos->y >= 224.0f) ||
+        if ((scrDrawPos[0].x >= 384.0f) || (scrDrawPos[3].x < 0.0f) || (scrDrawPos[0].y >= 224.0f) ||
             (scrDrawPos[3].y < 0.0f)) {
             return;
         }
@@ -1097,18 +1233,18 @@ void bgDrawOneChip(s32 x, s32 y, s32 xs, s32 ys, s32 gbix, u32 vtxCol, s32 ofsPa
 void bgAkebonoDraw() {
     s32 i;
 
-    scrDrawPos->x = 0.0f;
-    scrDrawPos->y = 0.0f;
+    scrDrawPos[0].x = 0.0f;
+    scrDrawPos[0].y = 0.0f;
     scrDrawPos[3].x = 128.0f;
     scrDrawPos[3].y = 224.0f;
-    scrDrawPos->z = scrDrawPos[3].z = PrioBase[bg_priority[3]];
-    scrDrawPos->s = scrDrawPos->t = 0.0f;
+    scrDrawPos[0].z = scrDrawPos[3].z = PrioBase[bg_priority[3]];
+    scrDrawPos[0].s = scrDrawPos[0].t = 0.0f;
     scrDrawPos[3].s = 1.0f;
-    scrDrawPos[3].t = 0.875f;
+    scrDrawPos[3].t = 1.0f;
 
     for (i = 0; i < 3; i++) {
         ppgWriteQuadUseTrans(scrDrawPos, 0xFFFFFFFF, NULL, i, i, 0, 0);
-        scrDrawPos->x += 128.0f;
+        scrDrawPos[0].x += 128.0f;
         scrDrawPos[3].x += 128.0f;
     }
 }
@@ -1121,7 +1257,7 @@ void ppgCalScrPosition(s32 x, s32 y, s32 xs, s32 ys) {
     point[1].x = (f32)(x + xs);
     point[1].y = (f32)(y + ys);
     point[0].z = point[1].z = 0;
-    njCalcPoints(0, point, point, 2);
+    njCalcPoints(NULL, point, point, SDL_arraysize(point));
     scrDrawPos[0].x = scrDrawPos[2].x = point[0].x;
     scrDrawPos[0].y = scrDrawPos[1].y = point[0].y;
     scrDrawPos[1].x = scrDrawPos[3].x = point[1].x;
@@ -1149,8 +1285,8 @@ void scr_trans_sub2(s32 x, s32 y, s32 suzi) {
     spoint[1].x = (f32)(x + suzi + 0x100);
     point[1].y = spoint[1].y = (f32)(y + 0x300);
     point[0].z = point[1].z = spoint[0].z = spoint[1].z = 0;
-    njCalcPoints(NULL, &point[0], &point[0], 2);
-    njCalcPoints(NULL, &spoint[0], &spoint[0], 2);
+    njCalcPoints(NULL, point, point, SDL_arraysize(point));
+    njCalcPoints(NULL, spoint, spoint, SDL_arraysize(spoint));
     bgpoly[0].x = spoint[0].x;
     bgpoly[0].y = point[0].y;
     bgpoly[0].z = point[0].z;
@@ -1196,9 +1332,9 @@ void scr_calc2(u8 bgnm) {
 }
 
 void Pause_Family_On() {
-    njUnitMatrix(0);
-    njTranslate(0, 0, 224, 0);
-    njScale(0, 1, -1, 1);
+    njUnitMatrix(NULL);
+    njTranslate(NULL, 0, 224, 0);
+    njScale(NULL, 1, -1, 1);
     njGetMatrix(&BgMATRIX[8]);
 }
 
@@ -1297,9 +1433,7 @@ void Frame_Adgjust(u16 pos_x, u16 pos_y) {
 }
 
 void Scrn_Pos_Init() {
-    u8 i;
-
-    for (i = 0; i < 8; i++) {
+    for (int i = 0; i < BG_SCROLL_SPACE_COUNT; i++) {
         bg_pos[i].scr_x.long_pos = 0;
         bg_pos[i].scr_x_buff.long_pos = 0;
         bg_pos[i].scr_y.long_pos = 0;
@@ -1317,9 +1451,7 @@ void Scrn_Move_Set(s8 bgnm, s16 x, s16 y) {
 }
 
 void Family_Init() {
-    u8 i;
-
-    for (i = 0; i < 8; i++) {
+    for (int i = 0; i < BG_SCROLL_SPACE_COUNT; i++) {
         fm_pos[i].family_x.long_pos = 0;
         fm_pos[i].family_y.long_pos = 0;
         fm_pos[i].family_x_buff.long_pos = 0;
@@ -1368,9 +1500,7 @@ void Scrn_Renew() {
 }
 
 void Irl_Family() {
-    u8 i;
-
-    for (i = 0; i < 8; i++) {
+    for (int i = 0; i < BG_SCROLL_SPACE_COUNT; i++) {
         fm_pos[i].family_x_buff.long_pos = fm_pos[i].family_x.long_pos;
         fm_pos[i].family_y_buff.long_pos = fm_pos[i].family_y.long_pos;
         bg_pos[i].scr_x_buff.long_pos = bg_pos[i].scr_x.long_pos;
@@ -1379,9 +1509,7 @@ void Irl_Family() {
 }
 
 void Irl_Scrn() {
-    s8 i;
-
-    for (i = 0; i < 8; i++) {
+    for (int i = 0; i < BG_SCROLL_SPACE_COUNT; i++) {
         bg_prm[i].bg_h_shift = scrn_adgjust_x + bg_pos[i].scr_x_buff.word_pos.h;
         end_prm[i].bg_h_shift = scrn_adgjust_x + fm_pos[i].family_x_buff.word_pos.h;
         bg_prm[i].bg_v_shift = bg_pos[i].scr_y_buff.word_pos.h - scrn_adgjust_y;
@@ -1395,7 +1523,7 @@ void Family_Move() {
     u8 i;
     u8 mask;
 
-    fam_ix = use_family[bg_w.stage];
+    fam_ix = use_family[bg_w.bg_index];
     mask = 0x80;
 
     for (i = 0; i < 8; i++, assign = mask >>= 1) {

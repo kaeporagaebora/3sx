@@ -5,12 +5,14 @@
 
 #include "sf33rd/Source/Game/rendering/color3rd.h"
 #include "common.h"
+#include "port/io/resource.h"
 #include "sf33rd/AcrSDK/MiddleWare/PS2/CapSndEng/cse.h"
 #include "sf33rd/AcrSDK/MiddleWare/PS2/CapSndEng/emlMemMap.h"
 #include "sf33rd/AcrSDK/MiddleWare/PS2/CapSndEng/emlTSB.h"
 #include "sf33rd/AcrSDK/common/plcommon.h"
 #include "sf33rd/AcrSDK/ps2/flps2vram.h"
 #include "sf33rd/Source/Common/PPGFile.h"
+#include "sf33rd/Source/Game/effect/ng/eff94.h"
 #include "sf33rd/Source/Game/engine/workuser.h"
 #include "sf33rd/Source/Game/io/gd3rd.h"
 #include "sf33rd/Source/Game/rendering/dc_ghost.h"
@@ -61,7 +63,7 @@ s32 palFormConv;
 
 // forward decls
 const u16 hitmark_color[128];
-const col_file_data color_file[161];
+const col_file_data color_file[195];
 
 void q_ldreq_color_data(LoadRequest* curr) {
     col_file_data* cfn;
@@ -130,10 +132,7 @@ void q_ldreq_color_data(LoadRequest* curr) {
                 fsClose();
 
                 cseSendBd2SpuWithId(
-                    Get_ramcnt_pointer(curr->key),
-                    Get_size_data_ramcnt_key(curr->key),
-                    curr->id + 1,
-                    cfn->data + 1
+                    Get_ramcnt_pointer(curr->key), Get_size_data_ramcnt_key(curr->key), curr->id + 1, cfn->data + 1
                 );
 
                 curr->rno = 5;
@@ -209,7 +208,7 @@ void init_trans_color_ram(s16 id, s16 key, u8 type, u16 data) {
     switch (type) {
     case 1:
         plcol[id] = Get_ramcnt_pointer(key);
-        if (My_char[id] == 0) {
+        if (My_char[id] == CHAR_GILL) {
             for (i = 0; i < 64; i++) {
                 ColorRAM[id * 16][i] = palConvSrcToRam(plcol[id]->col[0][Player_Color[id]][i]);
                 ColorRAM[(id * 16) + 8][i] = palConvSrcToRam(plcol[id]->col[1][Player_Color[id]][i]);
@@ -540,14 +539,23 @@ void palUpdateGhostDC() {
 void palUpdateGhostCP3(s32 pal, s32 nums) {
     plContext bits;
     s32 i;
+    s32 rows;
+    s32 j;
     u16* srcAdrs;
     u16* dstAdrs;
 
-    for (i = pal; i < (pal + nums); i++) {
+    for (i = SDL_max(pal - 3, 0); i < (pal + nums); i++) {
+        rows = SDL_min(4, 512 - i);
         flLockPalette(NULL, col3rd_w.palCP3.handle[i], &bits, 2);
         dstAdrs = bits.ptr;
         srcAdrs = (u16*)&ColorRAM[i];
-        SDL_memcpy(dstAdrs, srcAdrs, 0x80);
+        SDL_memcpy(dstAdrs, srcAdrs, rows * 0x80);
+
+        // For 8bpp graphics only color 0 is transparent
+        for (j = 1; j < rows; j++) {
+            dstAdrs[j * 64] |= 0x8000;
+        }
+
         flUnlockPalette(col3rd_w.palCP3.handle[i]);
     }
 }
@@ -563,164 +571,218 @@ const u16 hitmark_color[128] = {
     64478, 58270, 54174, 49950, 45662, 43550, 43486, 41310, 64478, 58206, 56094, 53982, 53918, 51806, 49694, 47582
 };
 
-const col_file_data color_file[161] = { { .data = 0x0, .type = 0x1, .apfn = 0x5B7, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5BA, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5BE, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5C1, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5C5, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5C8, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5CC, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5D1, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5D5, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5D9, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5DC, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5E0, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5E4, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5E8, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5EC, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5F0, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5F3, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5F6, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5F9, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x1, .apfn = 0x5FD, .free = 0x0 },
-                                        { .data = 0x20, .type = 0x2, .apfn = 0x9, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x567, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x56C, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x56F, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x572, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x575, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x578, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x57B, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x57E, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x581, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x584, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x587, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x58A, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x590, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x593, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x596, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x599, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x59C, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x59F, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x5A2, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x5A7, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x56B, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x56E, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x571, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x574, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x577, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x57A, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x57C, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x580, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x583, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x586, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x589, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x58C, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x58F, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x592, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x595, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x598, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x59B, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x59B, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x59E, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x5A1, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x5A5, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x5AA, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x7, .apfn = 0x5AB, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x553, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x554, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x555, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x556, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x557, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x558, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x559, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x55A, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x55B, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x55C, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x55D, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x55E, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x55F, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x560, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x561, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x562, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x563, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x564, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x565, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x3, .apfn = 0x566, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x4D, .free = 0x0 },
-                                        { .data = 0x6, .type = 0x4, .apfn = 0x5C2, .free = 0x0 },
-                                        { .data = 0x4, .type = 0x5, .apfn = 0x5C9, .free = 0x0 },
-                                        { .data = 0x5, .type = 0x6, .apfn = 0x5D2, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x58D, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0xE, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0xF, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x10, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x11, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x12, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x13, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x14, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x15, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x16, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x17, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x18, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x19, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x1A, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x1B, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x1C, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x1D, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x1E, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x1F, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x20, .free = 0x0 },
-                                        { .data = 0x12C, .type = 0x2, .apfn = 0x21, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x8, .apfn = 0x7, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0xA, .apfn = 0x5B8, .free = 0x0 },
-                                        { .data = 0x1, .type = 0xA, .apfn = 0x5BB, .free = 0x0 },
-                                        { .data = 0x2, .type = 0xA, .apfn = 0x5BF, .free = 0x0 },
-                                        { .data = 0x3, .type = 0xA, .apfn = 0x5C3, .free = 0x0 },
-                                        { .data = 0x4, .type = 0xA, .apfn = 0x5C6, .free = 0x0 },
-                                        { .data = 0x5, .type = 0xA, .apfn = 0x5CA, .free = 0x0 },
-                                        { .data = 0x6, .type = 0xA, .apfn = 0x5CE, .free = 0x0 },
-                                        { .data = 0x7, .type = 0xA, .apfn = 0x5D3, .free = 0x0 },
-                                        { .data = 0x8, .type = 0xA, .apfn = 0x5D6, .free = 0x0 },
-                                        { .data = 0x9, .type = 0xA, .apfn = 0x5DA, .free = 0x0 },
-                                        { .data = 0xA, .type = 0xA, .apfn = 0x5DD, .free = 0x0 },
-                                        { .data = 0xB, .type = 0xA, .apfn = 0x5E1, .free = 0x0 },
-                                        { .data = 0xC, .type = 0xA, .apfn = 0x5E5, .free = 0x0 },
-                                        { .data = 0xD, .type = 0xA, .apfn = 0x5E9, .free = 0x0 },
-                                        { .data = 0xE, .type = 0xA, .apfn = 0x5ED, .free = 0x0 },
-                                        { .data = 0xF, .type = 0xA, .apfn = 0x5F1, .free = 0x0 },
-                                        { .data = 0x10, .type = 0xA, .apfn = 0x5F4, .free = 0x0 },
-                                        { .data = 0x11, .type = 0xA, .apfn = 0x5F7, .free = 0x0 },
-                                        { .data = 0x12, .type = 0xA, .apfn = 0x5FA, .free = 0x0 },
-                                        { .data = 0x13, .type = 0xA, .apfn = 0x5FE, .free = 0x0 },
-                                        { .data = 0x0, .type = 0xC, .apfn = 0x548, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x62, .apfn = 0x50, .free = 0x0 },
-                                        { .data = 0x0, .type = 0xB, .apfn = 0x542, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x63, .apfn = 0x4C, .free = 0x0 },
-                                        { .data = 0x4, .type = 0x4, .apfn = 0x5CD, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0xB, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x0, .apfn = 0x8, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x63, .apfn = 0x53, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x63, .apfn = 0x54, .free = 0x0 },
-                                        { .data = 0x0, .type = 0x63, .apfn = 0x55, .free = 0x0 } };
+const col_file_data color_file[195] = {
+    { .data = 0x0, .type = 0x1, .apfn = 0x5B7, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5BA, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5BE, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5C1, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5C5, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5C8, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5CC, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5D1, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5D5, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5D9, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5DC, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5E0, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5E4, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5E8, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5EC, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5F0, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5F3, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5F6, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5F9, .free = 0x0 },
+    { .data = 0x0, .type = 0x1, .apfn = 0x5FD, .free = 0x0 },
+    { .data = 0x20, .type = 0x2, .apfn = 0x9, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x567, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x56C, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x56F, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x572, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x575, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x578, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x57B, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x57E, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x581, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x584, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x587, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x58A, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x590, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x593, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x596, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x599, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x59C, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x59F, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x5A2, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x5A7, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x56B, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x56E, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x571, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x574, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x577, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x57A, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x57C, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x580, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x583, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x586, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x589, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x58C, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x58F, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x592, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x595, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x598, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x59B, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x59B, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x59E, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x5A1, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x5A5, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x5AA, .free = 0x0 },
+    { .data = 0x0, .type = 0x7, .apfn = 0x5AB, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x553, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x554, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x555, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x556, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x557, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x558, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x559, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x55A, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x55B, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x55C, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x55D, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x55E, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x55F, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x560, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x561, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x562, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x563, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x564, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x565, .free = 0x0 },
+    { .data = 0x0, .type = 0x3, .apfn = 0x566, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x4D, .free = 0x0 },
+    { .data = 0x6, .type = 0x4, .apfn = 0x5C2, .free = 0x0 },
+    { .data = 0x4, .type = 0x5, .apfn = 0x5C9, .free = 0x0 },
+    { .data = 0x5, .type = 0x6, .apfn = 0x5D2, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x58D, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0xE, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0xF, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x10, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x11, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x12, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x13, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x14, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x15, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x16, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x17, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x18, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x19, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x1A, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x1B, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x1C, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x1D, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x1E, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x1F, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x20, .free = 0x0 },
+    { .data = 0x12C, .type = 0x2, .apfn = 0x21, .free = 0x0 },
+    { .data = 0x0, .type = 0x8, .apfn = 0x7, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0xA, .apfn = 0x5B8, .free = 0x0 },
+    { .data = 0x1, .type = 0xA, .apfn = 0x5BB, .free = 0x0 },
+    { .data = 0x2, .type = 0xA, .apfn = 0x5BF, .free = 0x0 },
+    { .data = 0x3, .type = 0xA, .apfn = 0x5C3, .free = 0x0 },
+    { .data = 0x4, .type = 0xA, .apfn = 0x5C6, .free = 0x0 },
+    { .data = 0x5, .type = 0xA, .apfn = 0x5CA, .free = 0x0 },
+    { .data = 0x6, .type = 0xA, .apfn = 0x5CE, .free = 0x0 },
+    { .data = 0x7, .type = 0xA, .apfn = 0x5D3, .free = 0x0 },
+    { .data = 0x8, .type = 0xA, .apfn = 0x5D6, .free = 0x0 },
+    { .data = 0x9, .type = 0xA, .apfn = 0x5DA, .free = 0x0 },
+    { .data = 0xA, .type = 0xA, .apfn = 0x5DD, .free = 0x0 },
+    { .data = 0xB, .type = 0xA, .apfn = 0x5E1, .free = 0x0 },
+    { .data = 0xC, .type = 0xA, .apfn = 0x5E5, .free = 0x0 },
+    { .data = 0xD, .type = 0xA, .apfn = 0x5E9, .free = 0x0 },
+    { .data = 0xE, .type = 0xA, .apfn = 0x5ED, .free = 0x0 },
+    { .data = 0xF, .type = 0xA, .apfn = 0x5F1, .free = 0x0 },
+    { .data = 0x10, .type = 0xA, .apfn = 0x5F4, .free = 0x0 },
+    { .data = 0x11, .type = 0xA, .apfn = 0x5F7, .free = 0x0 },
+    { .data = 0x12, .type = 0xA, .apfn = 0x5FA, .free = 0x0 },
+    { .data = 0x13, .type = 0xA, .apfn = 0x5FE, .free = 0x0 },
+    { .data = 0x0, .type = 0xC, .apfn = 0x548, .free = 0x0 },
+    { .data = 0x0, .type = 0x9, .apfn = 0xFFFF, .free = 0x0 },
+    { .data = 0x0, .type = 0x62, .apfn = 0x50, .free = 0x0 },
+    { .data = 0x0, .type = 0xB, .apfn = 0x542, .free = 0x0 },
+    { .data = 0x0, .type = 0x63, .apfn = 0x4C, .free = 0x0 },
+    { .data = 0x4, .type = 0x4, .apfn = 0x5CD, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0xB, .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = 0x8, .free = 0x0 },
+    { .data = 0x0, .type = 0x63, .apfn = 0x53, .free = 0x0 },
+    { .data = 0x0, .type = 0x63, .apfn = 0x54, .free = 0x0 },
+    { .data = 0x0, .type = 0x63, .apfn = 0x55, .free = 0x0 },
+    // Shin Akuma's stage palette
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_SHIN_AKUMA_BG_PALETTE), .free = 0x0 },
+    // NG Alex's stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ALEX_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ALEX_STAGE), .free = 0x0 },
+    // Ibuki's tanuki (NG effect 94), one row for each of Ibuki's NG colors
+    { .data = EFF94_PALETTE_ROW, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_EF94_PALETTE), .free = 0x0 },
+    // NG Gill's stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_GILL_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_GILL_STAGE), .free = 0x0 },
+    // First area of NG Ryu's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_RYU_A_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_RYU_A_STAGE), .free = 0x0 },
+    // Second area of NG Ryu's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_RYU_B_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_RYU_B_STAGE), .free = 0x0 },
+    // First area of NG Yun's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_YUN_A_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_YUN_A_STAGE), .free = 0x0 },
+    // Second area of NG Yun's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_YUN_B_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_YUN_B_STAGE), .free = 0x0 },
+    // First area of NG Dudley's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_DUDLEY_A_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_DUDLEY_A_STAGE), .free = 0x0 },
+    // Second area of NG Dudley's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_DUDLEY_B_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_DUDLEY_B_STAGE), .free = 0x0 },
+    // NG Necro's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_NECRO_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_NECRO_STAGE), .free = 0x0 },
+    // First area of NG Ibuki's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_A_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_A_STAGE), .free = 0x0 },
+    // Second area of NG Ibuki's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_B_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_B_STAGE), .free = 0x0 },
+    // Third area of NG Ibuki's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_C_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_C_STAGE), .free = 0x0 },
+    // First area of NG Elena's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ELENA_A_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ELENA_A_STAGE), .free = 0x0 },
+    // Second and third areas of NG Elena's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ELENA_B_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ELENA_B_STAGE), .free = 0x0 },
+    // NG Oro's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ORO_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ORO_STAGE), .free = 0x0 },
+    // NG Sean's stage: stage palette and stage PPG
+    { .data = 0x12C, .type = 0x2, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_SEAN_BG_PALETTE), .free = 0x0 },
+    { .data = 0x0, .type = 0x0, .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_SEAN_STAGE), .free = 0x0 },
+};

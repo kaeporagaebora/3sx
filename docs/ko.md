@@ -165,6 +165,11 @@ case 1, sub-state 1:                      // every frame after that
 the pause is always **90 frames**. `message_index` only picks which text is shown. (The other entries
 of `Time_Data` are never selected by this code.)
 
+**Double KO (since upstream #474):** for `message_index` 1, effect 84 sets `Game_pause = 1` but waits
+until the combo counter display has finished (`cmb_all_stock[0] == 0`) before it shows "DOUBLE K.O."
+and starts the 90-frame countdown. So a double KO that ends a combo pauses for longer than 90
+frames.
+
 ### What `Game_pause` freezes
 
 - **Players:** `Player_control()` skips the whole player update
@@ -310,6 +315,9 @@ the shake **starts wide and settles down**, flipping sides on every frame that r
 each position is held for 4 real frames, which makes the shake look slow and jerky. The shake count
 is `hs_you`, while the defender's freeze may be `hs_me` (through `same_dm_stop`). If those differ,
 the shake can end before the freeze does, or keep going after it ends.
+
+Since upstream's change to `set_quake()`, a shake count of 64 or more is clamped to the last two
+table entries (±3). The table has only 64 entries, so larger counts used to read past its end.
 
 According to the code, the hitstop and the shake **start on the same frame**, N+1. But after one
 or two frames they're frozen by the KO pause, so on screen the order is: frozen with "K.O.", then

@@ -5,6 +5,7 @@
 
 #include "sf33rd/Source/Game/animation/win_pl.h"
 #include "common.h"
+#include "sf33rd/Source/Game/animation/ng/bridge_fall.h"
 #include "sf33rd/Source/Game/effect/eff30.h"
 #include "sf33rd/Source/Game/effect/eff31.h"
 #include "sf33rd/Source/Game/effect/eff32.h"
@@ -57,7 +58,7 @@ s16 win_rno[2];
 s16 win_free[2];
 s16 poison_flag[2];
 
-const s16 winner_type_tbl[20] = { 6, 0, 0, 6, 2, 7, 9, 3, 4, 1, 12, 0, 5, 14, 8, 13, 6, 10, 11, 15 };
+const s16 winner_type_tbl[CHAR_COUNT] = { 6, 0, 0, 6, 2, 7, 9, 3, 4, 1, 12, 0, 5, 14, 8, 13, 6, 10, 11, 15 };
 
 void win_player(PLW* wk) {
     void (*win_jp_tbl[16])(PLW*) = { Win_00000, Win_01000, Win_02000, Win_03000, Win_04000, Win_05000,
@@ -71,6 +72,10 @@ void win_player(PLW* wk) {
 
     if (Bonus_Game_Flag) {
         bonus_game_win_pause(wk);
+        return;
+    }
+
+    if (bridge_fall_winner(wk)) {
         return;
     }
 
@@ -93,10 +98,6 @@ void Win_01000(PLW* wk) {
 
     bg_app_stop = 1;
 
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1)) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
-    }
-
     switch (wk->wu.routine_no[3]) {
     case 0:
         win_rno[0] = win_rno[1] = 0;
@@ -112,7 +113,7 @@ void Win_01000(PLW* wk) {
                 break;
             }
 
-            if (bg_w.stage == 9) {
+            if (bg_w.stage == STAGE_3S_ORO || bg_w.stage == STAGE_NG_ORO) {
                 set_char_move_init(&wk->wu, 9, 41);
                 win_rno[0] = 1;
                 break;
@@ -316,8 +317,21 @@ void jijii_full(PLW* wk) {
     }
 }
 
-const s16 win_2000_tbl[18] = { 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1 };
+/// Per-area flag that allows butler to appear from above. Disabled for areas with obstructed sky
+const s16 win_2000_tbl[AREA_COUNT] = {
+    [AREA_3S_GILL] = 0,    [AREA_3S_ALEX] = 0,      [AREA_3S_RYU] = 1,         [AREA_3S_YUN] = 1,
+    [AREA_3S_DUDLEY] = 1,  [AREA_3S_NECRO] = 1,     [AREA_3S_HUGO] = 0,        [AREA_3S_IBUKI] = 1,
+    [AREA_3S_ELENA] = 1,   [AREA_3S_ORO] = 1,       [AREA_3S_YANG] = 1,        [AREA_3S_KEN] = 0,
+    [AREA_3S_SEAN] = 1,    [AREA_3S_URIEN] = 1,     [AREA_3S_AKUMA] = 1,       [AREA_3S_SHIN_AKUMA] = 1,
+    [AREA_3S_CHUNLI] = 1,  [AREA_3S_MAKOTO] = 1,    [AREA_3S_Q] = 1,           [AREA_3S_TWELVE] = 1,
+    [AREA_3S_REMY] = 1,    [AREA_3S_BONUS_CAR] = 0, [AREA_3S_BONUS_BALLS] = 0, [AREA_NG_GILL] = 1,
+    [AREA_NG_ALEX] = 1,    [AREA_NG_RYU_A] = 1,     [AREA_NG_RYU_B] = 1,       [AREA_NG_YUN_A] = 1,
+    [AREA_NG_YUN_B] = 0,   [AREA_NG_DUDLEY_A] = 1,  [AREA_NG_DUDLEY_B] = 1,    [AREA_NG_NECRO] = 0,
+    [AREA_NG_IBUKI_A] = 1, [AREA_NG_IBUKI_B] = 1,   [AREA_NG_IBUKI_C] = 1,     [AREA_NG_ELENA_A] = 1,
+    [AREA_NG_ELENA_B] = 1, [AREA_NG_ORO] = 0,       [AREA_NG_SEAN] = 1,
+};
 
+/// Dudley's win routine
 void Win_02000(PLW* wk) {
     s16 work;
 
@@ -333,6 +347,10 @@ void Win_02000(PLW* wk) {
 
         win_rno[0] = win_rno[1] = 0;
         work = win_select(wk, 3);
+
+        // 32 - 35: rose
+        // 36 - 37: butler from above
+        // 38 - 39: catches jacket
 
         if (Round_num >= (save_w[Present_Mode].Battle_Number[Play_Type] * 2) ||
             PL_Wins[wk->wu.id] >= save_w[Present_Mode].Battle_Number[Play_Type] + 1) {
@@ -376,7 +394,7 @@ void Win_03000(PLW* wk) {
 
         if (Round_num >= (save_w[Present_Mode].Battle_Number[Play_Type] * 2) ||
             PL_Wins[wk->wu.id] >= save_w[Present_Mode].Battle_Number[Play_Type] + 1) {
-            if (bg_w.stage == 7) {
+            if (bg_w.stage == STAGE_3S_IBUKI) {
                 set_char_move_init(&wk->wu, 9, 43);
                 break;
             }
@@ -620,7 +638,7 @@ void Win_07000(PLW* wk) {
             work = win_select(wk, 7);
 
             if (work < 4) {
-                if (plw[0].player_number == 5 && plw[1].player_number == 5) {
+                if (plw[0].player_number == CHAR_NECRO && plw[1].player_number == CHAR_NECRO) {
                     win_rno[0] = 0;
                     set_char_move_init(&wk->wu, 9, work + 32);
                     break;
@@ -633,7 +651,7 @@ void Win_07000(PLW* wk) {
                 break;
             }
 
-            if (plw[0].player_number == 5 && plw[1].player_number == 5) {
+            if (plw[0].player_number == CHAR_NECRO && plw[1].player_number == CHAR_NECRO) {
                 win_rno[0] = 0;
                 set_char_move_init(&wk->wu, 9, work + 32);
                 break;
@@ -874,10 +892,10 @@ void Win_10000(PLW* wk) {
     }
 }
 
-const s16 q_em_distance_tbl[20][2] = { { -96, -16 }, { -104, 0 },  { -90, -16 }, { -100, -8 }, { -100, 0 },
-                                       { -106, 0 },  { 12, -117 }, { -84, -21 }, { -112, 0 },  { -106, 4 },
-                                       { -100, 0 },  { -90, -16 }, { -90, -16 }, { -96, -16 }, { -90, -16 },
-                                       { -90, -16 }, { 0, -96 },   { -2, -112 }, { -112, 4 },  { -96, -6 } };
+const s16 q_em_distance_tbl[CHAR_COUNT][2] = { { -96, -16 }, { -104, 0 },  { -90, -16 }, { -100, -8 }, { -100, 0 },
+                                               { -106, 0 },  { 12, -117 }, { -84, -21 }, { -112, 0 },  { -106, 4 },
+                                               { -100, 0 },  { -90, -16 }, { -90, -16 }, { -96, -16 }, { -90, -16 },
+                                               { -90, -16 }, { 0, -96 },   { -2, -112 }, { -112, 4 },  { -96, -6 } };
 
 s16 q_em_distance_chk(PLW* wk) {
     s16 work;
@@ -1539,7 +1557,7 @@ void bonus_game_win_pause(PLW* wk) {
         wk->wu.routine_no[3]++;
         win_rno[0] = win_rno[1] = 0;
 
-        if (Bonus_Game_Flag == 20) {
+        if (Bonus_Game_Flag == STAGE_3S_BONUS_CAR) {
             if (wk->wu.operator) {
                 if (Time_Over) {
                     set_char_move_init(&wk->wu, 9, 67);
@@ -1596,22 +1614,10 @@ void bonus_game_win_pause(PLW* wk) {
     }
 }
 
-const s16 meta_win_tbl[20] = { 33, 32, 32, 32, 32, 32, 33, 32, 32, 37, 32, 32, 32, 32, 34, 32, 32, 32, 32, 32 };
+const s16 meta_win_tbl[CHAR_COUNT] = { 33, 32, 32, 32, 32, 32, 33, 32, 32, 37, 32, 32, 32, 32, 34, 32, 32, 32, 32, 32 };
 
 void meta_win_pause(PLW* wk) {
     bg_app_stop = 1;
-
-    switch (wk->wu.routine_no[3]) {
-    case 0:
-        wk->wu.routine_no[3]++;
-        set_char_move_init(&wk->wu, 9, meta_win_tbl[wk->player_number]);
-        break;
-
-    case 1:
-    case 9:
-        char_move(&wk->wu);
-        break;
-    }
 
     if (Bonus_Game_Flag) {
         if (set_field_hosei_flag(&plw[1], bs_scrrrl[1][0], 1)) {
@@ -1625,5 +1631,17 @@ void meta_win_pause(PLW* wk) {
         if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1)) {
             set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
         }
+    }
+
+    switch (wk->wu.routine_no[3]) {
+    case 0:
+        wk->wu.routine_no[3]++;
+        set_char_move_init(&wk->wu, 9, meta_win_tbl[wk->player_number]);
+        break;
+
+    case 1:
+    case 9:
+        char_move(&wk->wu);
+        break;
     }
 }

@@ -19,9 +19,10 @@ Some terms used below:
 Frame numbers in this document use **frame N** for the frame on which the parry was detected
 (the hit check), N+1 for the next frame, and so on.
 
-There are two implementations in this repo: the **PS2** path (the default) and the **CPS3/arcade**
-path (used when `ArcadeBalance_IsEnabled()` is true). They mostly agree; the differences are listed
-in [PS2 vs arcade differences](#ps2-vs-arcade-differences).
+The game has two rule sets: the **PS2** rules (the default) and the **CPS3/arcade** rules (used when
+`ArcadeBalance_IsEnabled()` is true). Both run through the same `defense_ground()` / `defense_sky()`
+functions, which branch on `ArcadeBalance_IsEnabled()` where the rules differ. The differences are listed
+in [PS2 vs arcade differences](#7-ps2-vs-arcade-differences).
 
 ---
 
@@ -155,8 +156,8 @@ A parry is only possible if all of these are true:
   `guard_flag = 3` too.
 - The attack's `att.guard` bits allow it: bit `0x2` = can be parried high, `0x1` = can be parried
   low, `0x4` = can be air parried. An attack without these bits can't be parried that way.
-- The matching System Direction switch is on (`DIP_UNKNOWN_8` / `DIP_UNKNOWN_9` = ground
-  high/low parry disabled, `DIP_AIR_PARRY_DISABLED`, `DIP_ANTI_AIR_PARRY_DISABLED`,
+- The matching System Direction switch is on (`DIP_HIGH_PARRY_DISABLED` /
+  `DIP_LOW_PARRY_DISABLED` = ground high/low parry disabled, `DIP_AIR_PARRY_DISABLED`, `DIP_ANTI_AIR_PARRY_DISABLED`,
   `DIP_RED_PARRY_DISABLED`).
 
 ### Blue vs. red: the `just_now` check
@@ -176,7 +177,7 @@ guard, routines 4–6, and `Damage_07000` for air guard, routine 7) to `guard_ki
 **A red parry is simply a parry while `guard_chuu` is 1–4, which means during blockstun,
 including the guard freeze.**
 
-### Ground (`defense_ground_ps2`)
+### Ground (`defense_ground`, PS2 rules)
 
 For a high-parryable attack (`att.guard & 2`):
 
@@ -197,7 +198,7 @@ for low, and the attacker's hit flag gets `0x40`.
 "the attacker is jumping". It marks attacks that need the shorter **anti-air** window
 (command 12, 5 frames).
 
-### Air (`defense_sky_ps2`)
+### Air (`defense_sky`, PS2 rules)
 
 If the attack can be air parried (`att.guard & 4`):
 
@@ -461,14 +462,15 @@ second setting).
 
 ## 7. PS2 vs. arcade differences
 
-The PS2 path is the default. The arcade path is used with `ArcadeBalance_IsEnabled()`.
+The PS2 rules are the default. The arcade rules are used with `ArcadeBalance_IsEnabled()`. Both live in
+the same `defense_ground()` / `defense_sky()` functions.
 
-| | PS2 (`defense_*_ps2`) | Arcade (`defense_*_cps3`) |
+| | PS2 rules | Arcade rules |
 | --- | --- | --- |
 | Air red parry | Yes (`grdb2` threshold) | **No**: in air blockstun, any `waza_flag[5] != 0` parries (blue window) |
 | Air "down" parry (command 6) | Registered but never checked | Checked after command 5. Sets routine 35 (`0x23`), gated by `DIP_ANTI_AIR_PARRY_DISABLED` |
 | Ground vs. `jump_att_flag` attacks | Command 12 (high) / 4 (low), **both gated by `DIP_ANTI_AIR_PARRY_DISABLED`**, with no fallback to command 3 | Command 12 for high, ungated. The low check uses command 4 without looking at `jump_att_flag` |
-| Auto-parry (training, `DIP_AUTO_PARRY_DISABLED` cleared) | Every parry check passes | Not supported |
+| Auto-parry (training, `DIP_AUTO_PARRY_DISABLED` cleared) | Every parry check passes | Every parry check passes |
 | `Normal_31000`/`35000` setup | Flips a positive `dm_stop` to negative and applies `subtract_dm_vital` (parry chip) | Leaves both alone |
 | `add_sp_arts_gauge_paring` | No meter while a super freeze (`sa_stop_check`) is active | Always adds |
 
@@ -476,7 +478,8 @@ The PS2 path is the default. The arcade path is used with `ArcadeBalance_IsEnabl
 `Dir_Default_Data` (`menu/dir_data.c`). `get_system_direction_parameter()` then set
 `DIP_ANTI_AIR_PARRY_DISABLED` for every mode. In the PS2 path, that meant attacks with
 `jump_att_flag` set couldn't be parried from the ground at all. In the arcade path, it turned off
-the command-6 air parry. The default is now back to ON.
+the command-6 air parry. This branch sets the default back to ON. Upstream `main` still defaults it to
+OFF, though upstream now ignores the switch for ground parries in arcade mode.
 
 ---
 
@@ -488,7 +491,7 @@ the command-6 air parry. The default is now back to ON.
 | Window option, red thresholds | `cmd_main.c` `cmd_data_set()`, `hitcheck.c` `make_red_blocking_time()`, `system/sysdir.c` `blok_b_omake` / `blok_r_omake` |
 | Input state machine, lockout | `cmd_main.c` `check_10()`, `command_ok_move()`, `check_init()` |
 | Input reset after a parry | `cmd_main.c` `waza_compel_all_init2()` |
-| Parry vs. guard decision | `hitcheck.c` `defense_ground_ps2/cps3()`, `defense_sky_ps2/cps3()` |
+| Parry vs. guard decision | `hitcheck.c` `defense_ground()`, `defense_sky()` |
 | Red/rapid classification | `hitcheck.c` `blocking_point_count_up()` |
 | Freeze lengths | `hitcheck.c` `set_paring_status()`, `sel_hs_add_tbl` |
 | Freeze processing | `plmain.c` `check_hit_stop()`, `select_hit_stop()`, `pls02.c` `set_hit_stop_hit_quake()` |

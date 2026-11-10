@@ -1,8 +1,14 @@
 #ifndef BG_H
 #define BG_H
 
+#include "constants.h"
 #include "structs.h"
 #include "types.h"
+
+#define BG_SCROLL_SPACE_COUNT 8
+#define LINE_SCROLL_BASE 0x200
+#define LINE_SCROLL_LINES 1024
+#define BG_LAYER_ANIMS 4
 
 typedef struct {
     s8 be_flag;
@@ -20,11 +26,11 @@ typedef struct {
     u16* bg_address;
     u16* suzi_adrs;
     s16 old_pos_x;
-    s32 zuubun;
+    s32 zuubun; /// 16.16 line translation multiplier
     s16 no_suzi_line;
-    u16* start_suzi;
-    s16 u_line;
-    s16 d_line;
+    s16 start_suzi; /// First line of the perspective fan
+    s16 u_line;     /// Lines that lag behind the layer
+    s16 d_line;     /// Lines that run ahead of the layer
     s16 bg_adrs_c_no;
     s16 suzi_c_no;
     s16 pos_x_work;
@@ -52,17 +58,34 @@ typedef struct {
     s16 abs_y;
 } BGW;
 
+/// State of the bridge on New Generation Elena's stage
+typedef struct {
+    s8 breaking;         /// The bridge has started to break
+    s8 landed;           /// The bridge that falls into the second area has landed
+    s8 quake;            /// Which way the screen shakes this frame
+    s16 timer;           /// Frames left of the current step of the break
+    s16 y;               /// Height of the bridge, which a lying loser follows
+    s8 winner_step;      /// Step of the winner's fall
+    s16 winner_timer[2]; /// Frames left of the winner's fall, by player
+    s8 loser_step;       /// Step of the loser's fall
+    s8 loser_fall_step;  /// Step of a standing loser's fall
+    s8 loser_lying;      /// The loser was lying down when the round ended, so they ride the bridge down
+    s16 loser_timer[2];  /// Frames left of a standing loser's fall, by player
+} BGBridge;
+
 typedef struct {
     s8 bg_routine;
     s8 bg_r_1;
     s8 bg_r_2;
+    s8 intro_direction;
     s8 stage;
     s8 area;
     s8 compel_flag;
+    s8 object_set; /// Random 0-3 that picks between alternate sets of stage objects
     s32 scroll_cg_adr;
     s32 ake_cg_adr;
-    u8 scno;
-    u8 scrno;
+    u8 scno;  /// How many layers the background scrolls
+    u8 scrno; /// How many layers have graphics to load and draw
     s16 bg2_sp_x;
     s16 bg2_sp_y;
     s16 scr_stop;
@@ -85,6 +108,14 @@ typedef struct {
     s16 max_x;
     u8 bg_opaque;
     BGW bgw[7];
+
+    s8 layer_frame[BG_LAYER_ANIMS];      /// Frame of each animation of the area's `bg_layer_frames_tbl`
+    s8 layer_frame_step[BG_LAYER_ANIMS]; /// Animation state of the layer frames, kept by the stage code
+    s8 layer_frame_timer[BG_LAYER_ANIMS];
+    s8 layer_frame_sequence;
+    s8 layer_frame_cycles;
+    u32 line_scroll_frames; /// Frames of line scroll for areas whose lines scroll by time (`bg_line_scroll_tbl`)
+    BGBridge bridge;
 } BG;
 
 // MARK: - Serialized

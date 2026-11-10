@@ -20,6 +20,10 @@ build
 temp
 third_party
 states
-rom
+/rom
 dump
 *.AFS
+
+# LLMs
+
+.mcp.json

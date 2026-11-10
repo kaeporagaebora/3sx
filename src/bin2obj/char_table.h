@@ -27,16 +27,38 @@ extern u32 _orm_char_table[];
 extern u32 _rca_char_table[];
 extern u32 _afc_char_table[];
 extern u32 _usa_char_table[];
+extern u32 _ng_fnl_char_table[];
+extern u32 _ng_usa_char_table[];
+extern u32 _ng_j10_a_char_table[];
+extern u32 _ng_j10_b_char_table[];
+extern u32 _ng_hkg_a_char_table[];
+extern u32 _ng_hkg_b_char_table[];
+extern u32 _ng_eng_char_table[];
+extern u32 _ng_rca_char_table[];
+extern u32 _ng_j11_char_table[];
+extern u32 _ng_eff77_char_table[];
+extern u32 _ng_eff67_char_table[];
+extern u32 _ng_afc_a_char_table[];
+extern u32 _ng_afc_b_char_table[];
+extern u32 _ng_brz_char_table[];
+extern u32 _ng_nyc_char_table[];
+extern u32 _ng_eff44_char_table[];
+extern u32 _ng_eff09_char_table[];
+extern u32 _ng_effc1_char_table[];
+extern u32 _ng_yun_appear_char_table[];
+extern u32 _ng_yun_bow_char_table[];
+extern u32 _ng_eff94_char_table[];
 extern u32 _effD4_char_table[];
-extern u32 _ag_00_char_table[];
-extern u32 _ag_01_char_table[];
-extern u32 _ag_02_char_table[];
-extern u32 _ag_03_char_table[];
-extern u32 _ag_04_char_table[];
-extern u32 _ag_05_char_table[];
-extern u32 _ag_06_char_table[];
-extern u32 _ag_07_char_table[];
-extern u32 _ag_face_panel_table[];
+
+/// The judges' tables hold offsets from their own start that land in the face panel
+/// scripts after all eight, so everything has to be laid out back to back.
+typedef struct {
+    u32 judges[8][4];
+    u32 face_panel[490];
+} AgCharTable;
+
+extern AgCharTable _ag_char_table;
+
 extern u32 _ef01_char_table[];
 extern u32 _plef_char_table[];
 extern u32 _ef13_char_table[];

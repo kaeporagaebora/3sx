@@ -48,6 +48,7 @@
 #include "sf33rd/Source/Game/stage/bg.h"
 #include "sf33rd/Source/Game/stage/bg_data.h"
 #include "sf33rd/Source/Game/stage/bg_sub.h"
+#include "sf33rd/Source/Game/stage/ng/bg380.h"
 #include "sf33rd/Source/Game/stage/ta_sub.h"
 #include "sf33rd/Source/Game/stage/tate00.h"
 #include "sf33rd/Source/Game/system/reset.h"
@@ -380,9 +381,9 @@ void Game01() {
             }
 
             if ((plw[0].wu.operator != 0) && (plw[1].wu.operator != 0)) {
-                Play_Type = 1;
+                Play_Type = PLAY_TYPE_PLAYER_VS_PLAYER;
             } else {
-                Play_Type = 0;
+                Play_Type = PLAY_TYPE_PLAYER_VS_CPU;
             }
         }
 
@@ -590,12 +591,12 @@ void Game2_2() {
     TATE00();
 
     for (i = 0; i < 3; i++) {
-        if (stage_bgw_number[bg_w.stage][i] > 0) {
+        if (stage_bgw_number[bg_w.bg_index][i] > 0) {
             Bg_On_R(1 << i);
         }
     }
 
-    if (bg_w.stage == 7) {
+    if (bg_w.bg_index == AREA_3S_IBUKI) {
         Bg_On_R(4);
     }
 
@@ -641,9 +642,32 @@ void Game2_5() {
         pcon_rno[3] = 0;
         appear_type = APPEAR_TYPE_NON_ANIMATED;
         erase_extra_plef_work();
-        compel_bg_init_position();
         win_lose_work_clear();
+
+        if (bg_next_area_begin()) {
+            G_No[3] = 2;
+            break;
+        }
+
+        compel_bg_init_position();
         TATE00();
+        break;
+
+    case 2:
+        Switch_Screen(0);
+
+        if (!Check_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area])) {
+            break;
+        }
+
+        bg_next_area_finish();
+
+        if (bg380_is_bridge_falling()) {
+            appear_type = APPEAR_TYPE_ANIMATED;
+        }
+
+        TATE00();
+        G_No[3] = 1;
         break;
 
     default:
@@ -1299,8 +1323,8 @@ void Game09() {
         bg_work_clear();
         win_lose_work_clear();
 
-        if (Bonus_Game_Flag == 0x15) {
-            My_char[COM_id] = 12;
+        if (Bonus_Game_Flag == STAGE_3S_BONUS_BALLS) {
+            My_char[COM_id] = CHAR_SEAN;
         } else {
             My_char[COM_id] = My_char[Player_id];
         }
@@ -1312,13 +1336,13 @@ void Game09() {
         Switch_Screen(1);
 
         if (--G_Timer == 0) {
-            if (!Check_LDREQ_Queue_BG(bg_w.stage)) {
+            if (!Check_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area])) {
                 G_Timer = 1;
             } else {
                 G_No[2] += 1;
                 Clear_Flash_No();
 
-                if (Bonus_Type == 0x15) {
+                if (Bonus_Type == STAGE_3S_BONUS_BALLS) {
                     makeup_bonus_game_level(COM_id);
                     effect_35_init(0x3C, 5);
                     effect_J2_init(0x78);
@@ -1408,7 +1432,7 @@ s16 Bonus_Sub() {
     set_EXE_flag();
     Time_Control();
 
-    if (Bonus_Type == 0x15) {
+    if (Bonus_Type == STAGE_3S_BONUS_BALLS) {
         Bonus_Game_Complete = Player_control_bonus();
     } else {
         Bonus_Game_Complete = Player_control_bonus2();
@@ -1706,6 +1730,7 @@ void Loop_Demo_Sub() {
     Play_Game = 0;
     pulpul_stop();
     pp_operator_check_flag(1);
+    effect_work_init();
 }
 
 void Next_Title_Sub() {

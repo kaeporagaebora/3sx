@@ -6,6 +6,10 @@
 #include "sf33rd/Source/Game/animation/appear.h"
 #include "common.h"
 #include "sf33rd/Source/Game/animation/app_data.h"
+#include "sf33rd/Source/Game/animation/ng/appear42.h"
+#include "sf33rd/Source/Game/animation/ng/appear43.h"
+#include "sf33rd/Source/Game/animation/ng/appear44.h"
+#include "sf33rd/Source/Game/animation/ng/appear45.h"
 #include "sf33rd/Source/Game/effect/eff09.h"
 #include "sf33rd/Source/Game/effect/eff15.h"
 #include "sf33rd/Source/Game/effect/eff46.h"
@@ -26,6 +30,7 @@
 #include "sf33rd/Source/Game/sound/sound3rd.h"
 #include "sf33rd/Source/Game/stage/bg.h"
 #include "sf33rd/Source/Game/stage/bg_data.h"
+#include "sf33rd/Source/Game/stage/ng/bg380.h"
 #include "sf33rd/Source/Game/stage/ta_sub.h"
 #include "sf33rd/Source/Game/system/work_sys.h"
 
@@ -59,18 +64,18 @@ s32 home_visitor_check(PLW* wk) {
         pl_num = plw[1].player_number;
     }
 
-    if (Play_Type) {
-        if (Champion == wk->wu.id && wk->player_number == pl_num && pl_num != 8) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
+        if (Champion == wk->wu.id && wk->player_number == pl_num && pl_num != CHAR_ELENA) {
             hv_type = 1;
         }
-    } else if (wk->wu.operator && wk->player_number == pl_num && pl_num != 8) {
+    } else if (wk->wu.operator && wk->player_number == pl_num && pl_num != CHAR_ELENA) {
         hv_type = 1;
     }
 
     return hv_type;
 }
 
-void appear_data_set(PLW* wk, APPEAR_DATA* dtbl) {
+void appear_data_set(PLW* wk, const APPEAR_DATA* dtbl) {
     if (wk->wu.id) {
         wk->wu.xyz[0].disp.pos = bg_w.bgw[1].pos_x_work - dtbl->hx;
         wk->wu.xyz[1].disp.pos = dtbl->hy;
@@ -89,16 +94,18 @@ void appear_data_set(PLW* wk, APPEAR_DATA* dtbl) {
     }
 }
 
+#define BRIDGE_FALL_APPEAR_DATA 57
+
 void appear_data_init_set(PLW* wk) {
-    APPEAR_DATA* dtbl;
     s8 ap_work;
     s16 id_work;
 
     Appear_hv[wk->wu.id] = home_visitor_check(wk);
-
     id_work = wk->wu.id ^ 1;
 
-    if (bg_w.area) {
+    if (bg380_is_bridge_falling()) {
+        ap_work = BRIDGE_FALL_APPEAR_DATA;
+    } else if (bg_w.area) {
         ap_work = 0;
     } else if (Appear_hv[wk->wu.id]) {
         ap_work = app_type_tbl2[wk->player_number][plw[id_work].player_number][bg_w.stage];
@@ -106,20 +113,20 @@ void appear_data_init_set(PLW* wk) {
         ap_work = app_type_tbl[wk->player_number][plw[id_work].player_number][bg_w.stage];
     }
 
-    dtbl = (APPEAR_DATA*)&appear_data[ap_work];
-
-    appear_data_set(wk, dtbl);
+    appear_data_set(wk, &appear_data[ap_work]);
 }
 
 void appear_player(PLW* wk) {
-    void (*appear_jmp_tbl[42])(
-        PLW* wk) = { Appear_00000, Appear_01000, Appear_01000, Appear_03000, Appear_04000, Appear_05000, Appear_06000,
-                     Appear_07000, Appear_08000, Appear_09000, Appear_10000, Appear_11000, Appear_12000, Appear_13000,
-                     Appear_14000, Appear_15000, Appear_16000, Appear_17000, Appear_18000, Appear_19000, Appear_20000,
-                     Appear_21000, Appear_22000, Appear_23000, Appear_24000, Appear_25000, Appear_26000, Appear_06000,
-                     Appear_28000, Appear_29000, Appear_30000, Appear_31000, Appear_32000, Appear_33000, Appear_34000,
-                     Appear_01000, Appear_36000, Appear_37000, Appear_38000, Appear_39000, Appear_06000, Appear_41000 };
-    appear_jmp_tbl[(short)wk->wu.routine_no[4]](wk);
+    void (*appear_jmp_tbl[46])(PLW* wk) = {
+        Appear_00000, Appear_01000, Appear_01000, Appear_03000, Appear_04000, Appear_05000, Appear_06000, Appear_07000,
+        Appear_08000, Appear_09000, Appear_10000, Appear_11000, Appear_12000, Appear_13000, Appear_14000, Appear_15000,
+        Appear_16000, Appear_17000, Appear_18000, Appear_19000, Appear_20000, Appear_21000, Appear_22000, Appear_23000,
+        Appear_24000, Appear_25000, Appear_26000, Appear_06000, Appear_28000, Appear_29000, Appear_30000, Appear_31000,
+        Appear_32000, Appear_33000, Appear_34000, Appear_01000, Appear_36000, Appear_37000, Appear_38000, Appear_39000,
+        Appear_06000, Appear_41000, Appear_42000, Appear_43000, Appear_44000, Appear_45000
+    };
+
+    appear_jmp_tbl[wk->wu.routine_no[4]](wk);
 }
 
 void Appear_00000(PLW* wk) {
@@ -425,25 +432,75 @@ void Appear_06000(PLW* wk) {
 }
 
 const APPEAR_DATA appear_data[] = {
-    { -88, 0, -88, 0, 1, 0, 0 },    { -88, 0, -88, 0, 1, 1, 0 },     { -88, 0, -88, 0, 1, 2, 0 },
-    { -124, 0, -124, 0, 1, 3, 12 }, { -256, 144, -256, 0, 1, 4, 0 }, { 288, 0, 288, 1, 0, 5, 0 },
-    { -248, 0, -248, 0, 1, 6, 0 },  { -88, 0, -88, 0, 1, 7, 0 },     { -62, 0, -62, 0, 1, 8, 0 },
-    { -88, 200, -88, 0, 1, 9, 16 }, { -216, 0, -224, 0, 1, 10, 16 }, { -102, 0, -102, 0, 1, 1, 0 },
-    { -88, 0, -88, 0, 1, 11, 0 },   { -17, 0, -17, 0, 1, 1, 0 },     { -88, 384, -88, 0, 1, 13, 0 },
-    { -88, 0, -88, 0, 1, 14, 0 },   { -128, 0, -128, 0, 1, 15, 0 },  { -272, 0, -304, 0, 1, 12, 0 },
-    { -88, 0, -88, 0, 1, 16, 0 },   { -88, 0, -88, 0, 1, 17, 0 },    { -88, 0, -88, 0, 1, 21, 0 },
-    { -48, 0, -48, 0, 1, 18, 0 },   { -120, 0, -120, 0, 1, 1, 0 },   { -88, 0, -88, 0, 1, 3, 23 },
-    { 256, 0, 256, 0, 1, 20, 0 },   { -88, 0, -88, 0, 1, 22, 0 },    { -88, 0, -88, 0, 1, 23, 0 },
-    { -96, 0, -96, 0, 1, 24, 0 },   { -96, 0, -96, 0, 1, 25, 0 },    { 168, 80, 168, 0, 0, 26, 0 },
-    { 248, 0, 248, 0, 0, 27, 0 },   { -112, 0, -112, 0, 1, 28, 0 },  { -111, 0, -111, 0, 1, 1, 0 },
-    { -48, 0, -48, 0, 1, 3, 18 },   { -96, 0, -96, 0, 1, 3, 23 },    { -53, 0, -53, 0, 1, 3, 21 },
-    { -53, 0, -53, 0, 1, 3, 22 },   { -72, 0, -72, 0, 1, 38, 20 },   { -84, 0, -84, 0, 1, 3, 22 },
-    { -84, 0, -84, 0, 1, 3, 22 },   { -256, 0, -256, 0, 1, 29, 0 },  { -88, 0, -88, 0, 1, 30, 0 },
-    { -64, 0, -64, 0, 1, 31, 0 },   { -258, 0, -258, 0, 1, 32, 0 },  { -256, 0, -256, 0, 1, 33, 0 },
-    { -88, 0, -88, 0, 1, 34, 0 },   { -88, 0, -88, 0, 1, 35, 0 },    { -88, 0, -88, 0, 1, 3, 16 },
-    { -24, 0, -24, 0, 1, 36, 0 },   { -24, 0, -24, 0, 1, 37, 0 },    { -448, 0, -448, 0, 1, 39, 0 },
-    { -72, 0, -72, 0, 1, 3, 17 },   { -248, 0, -248, 0, 1, 40, 0 },  { -88, 0, -88, 0, 1, 41, 0 },
+    { -88, 0, -88, 0, 1, 0, 0 },
+    { -88, 0, -88, 0, 1, 1, 0 },
+    { -88, 0, -88, 0, 1, 2, 0 },
+    { -124, 0, -124, 0, 1, 3, 12 },
+    { -256, 144, -256, 0, 1, 4, 0 },
+    { 288, 0, 288, 1, 0, 5, 0 },
+    { -248, 0, -248, 0, 1, 6, 0 },
+    { -88, 0, -88, 0, 1, 7, 0 },
+    { -62, 0, -62, 0, 1, 8, 0 },
+    { -88, 200, -88, 0, 1, 9, 16 },
+    { -216, 0, -224, 0, 1, 10, 16 },
+    { -102, 0, -102, 0, 1, 1, 0 },
+    { -88, 0, -88, 0, 1, 11, 0 },
+    { -17, 0, -17, 0, 1, 1, 0 },
+    { -88, 384, -88, 0, 1, 13, 0 },
+    { -88, 0, -88, 0, 1, 14, 0 },
+    { -128, 0, -128, 0, 1, 15, 0 },
+    { -272, 0, -304, 0, 1, 12, 0 },
+    { -88, 0, -88, 0, 1, 16, 0 },
+    { -88, 0, -88, 0, 1, 17, 0 },
+    { -88, 0, -88, 0, 1, 21, 0 },
+    { -48, 0, -48, 0, 1, 18, 0 },
+    { -120, 0, -120, 0, 1, 1, 0 },
+    { -88, 0, -88, 0, 1, 3, 23 },
+    { 256, 0, 256, 0, 1, 20, 0 },
+    { -88, 0, -88, 0, 1, 22, 0 },
+    { -88, 0, -88, 0, 1, 23, 0 },
+    { -96, 0, -96, 0, 1, 24, 0 },
+    { -96, 0, -96, 0, 1, 25, 0 },
+    { 168, 80, 168, 0, 0, 26, 0 },
+    { 248, 0, 248, 0, 0, 27, 0 },
+    { -112, 0, -112, 0, 1, 28, 0 },
+    { -111, 0, -111, 0, 1, 1, 0 },
+    { -48, 0, -48, 0, 1, 3, 18 },
+    { -96, 0, -96, 0, 1, 3, 23 },
+    { -53, 0, -53, 0, 1, 3, 21 },
+    { -53, 0, -53, 0, 1, 3, 22 },
+    { -72, 0, -72, 0, 1, 38, 20 },
+    { -84, 0, -84, 0, 1, 3, 22 },
+    { -84, 0, -84, 0, 1, 3, 22 },
+    { -256, 0, -256, 0, 1, 29, 0 },
+    { -88, 0, -88, 0, 1, 30, 0 },
+    { -64, 0, -64, 0, 1, 31, 0 },
+    { -258, 0, -258, 0, 1, 32, 0 },
+    { -256, 0, -256, 0, 1, 33, 0 },
+    { -88, 0, -88, 0, 1, 34, 0 },
+    { -88, 0, -88, 0, 1, 35, 0 },
+    { -88, 0, -88, 0, 1, 3, 16 },
+    { -24, 0, -24, 0, 1, 36, 0 },
+    { -24, 0, -24, 0, 1, 37, 0 },
+    { -448, 0, -448, 0, 1, 39, 0 },
+    { -72, 0, -72, 0, 1, 3, 17 },
+    { -248, 0, -248, 0, 1, 40, 0 },
+    { -88, 0, -88, 0, 1, 41, 0 },
     { -88, 0, -88, 0, 1, 3, 17 },
+
+    // Yun skating in on his stage from New Generation
+    { 592, 160, 592, 1, 0, 42, 0 },
+
+    // New Generation's regular intro (its record 2)
+    { -96, 0, -128, 0, 1, 1, 0 },
+    // New Generation's fall onto the bridge in the second area of Elena's stage (its record 14)
+    { -96, 384, -128, 0, 1, 43, 0 },
+    // New Generation's drop from the ceiling on Oro's stage (its record 9)
+    { -96, 200, -128, 0, 1, 9, 16 },
+    // Yang leaping in on his stage from New Generation (its record 5)
+    { 464, 216, 464, 1, 1, 44, 0 },
+    // Yun bowing back to Yang on Yang's stage from New Generation (its record 2, with NG's bow)
+    { -96, 0, -128, 0, 1, 45, 0 },
 };
 
 void Appear_07000(PLW* wk) {
@@ -452,7 +509,7 @@ void Appear_07000(PLW* wk) {
         wk->wu.disp_flag = 1;
         bg_app_stop = 1;
 
-        if (plw[wk->wu.id ^ 1].player_number == 12 && bg_w.stage == 12 && bg_w.area == 0) {
+        if (plw[wk->wu.id ^ 1].player_number == CHAR_SEAN && bg_w.stage == STAGE_3S_SEAN) {
             wk->wu.routine_no[4] = 1;
             set_char_move_init(&wk->wu, 9, 17);
             wk->wu.routine_no[3] = 3;
@@ -547,7 +604,7 @@ void Appear_08000(PLW* wk) {
             break;
         }
 
-        appear_data_set(wk, (APPEAR_DATA*)appear_data);
+        appear_data_set(wk, &appear_data[0]);
         wk->wu.routine_no[4] = 2;
         break;
 
@@ -562,7 +619,7 @@ void Appear_08000(PLW* wk) {
 }
 
 s32 sean_appear_check(PLW* wk, s16 id) {
-    if (plw[id].player_number == 12 && bg_w.stage == 12) {
+    if (plw[id].player_number == CHAR_SEAN && bg_w.stage == STAGE_3S_SEAN) {
         return 1;
     }
 
@@ -871,11 +928,11 @@ void Appear_16000(PLW* wk) {
         bg_app_stop = 1;
 
         if (smoke_check[bg_w.bg_index]) {
-            set_char_move_init(&wk->wu, 9, 0xE);
-            return;
+            set_char_move_init(&wk->wu, 9, 14);
+        } else {
+            set_char_move_init(&wk->wu, 9, 12);
         }
 
-        set_char_move_init(&wk->wu, 9, 0xC);
         break;
 
     case 1:
@@ -898,11 +955,11 @@ s16 gill_appear_check() {
 
     id_w = -1;
 
-    if (plw[0].player_number == 0) {
+    if (plw[0].player_number == CHAR_GILL) {
         id_w = 1;
     }
 
-    if (plw[1].player_number == 0) {
+    if (plw[1].player_number == CHAR_GILL) {
         id_w = 0;
     }
 
@@ -910,7 +967,7 @@ s16 gill_appear_check() {
         return 1;
     }
 
-    if (Play_Type == 1) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
         return 1;
     }
 
@@ -928,7 +985,7 @@ void Appear_17000(PLW* wk) {
         wk->wu.disp_flag = 1;
 
         if (Gill_Appear_Flag) {
-            appear_data_set(wk, (APPEAR_DATA*)appear_data);
+            appear_data_set(wk, &appear_data[0]);
             Appear_00000(wk);
             return;
         }
@@ -984,7 +1041,7 @@ void Appear_18000(PLW* wk) {
         wk->wu.routine_no[3]++;
         wk->wu.disp_flag = 1;
 
-        if (plw[0].player_number == 8 && plw[1].player_number == 8) {
+        if (plw[0].player_number == CHAR_ELENA && plw[1].player_number == CHAR_ELENA) {
             Appear_free[wk->wu.id] = 0;
 
             if (wk->wu.id) {
@@ -1182,7 +1239,7 @@ void Appear_21000(PLW* wk) {
         work = random_16();
         work &= 7;
         if (work == 6 || work == 7) {
-            appear_data_set(wk, (APPEAR_DATA*)appear_data + 24);
+            appear_data_set(wk, &appear_data[24]);
             set_char_move_init(&wk->wu, 9, 0xE);
         } else {
             set_char_move_init(&wk->wu, 9, work + 8);
@@ -1282,11 +1339,20 @@ void Appear_25000(PLW* wk) {
     wk->wu.routine_no[3] = 0;
 }
 
-const s16 smoke_check[] = { 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0 };
+const s16 smoke_check[AREA_COUNT] = {
+    [AREA_3S_GILL] = 0,    [AREA_3S_ALEX] = 0,      [AREA_3S_RYU] = 1,         [AREA_3S_YUN] = 1,
+    [AREA_3S_DUDLEY] = 1,  [AREA_3S_NECRO] = 0,     [AREA_3S_HUGO] = 0,        [AREA_3S_IBUKI] = 1,
+    [AREA_3S_ELENA] = 0,   [AREA_3S_ORO] = 1,       [AREA_3S_YANG] = 0,        [AREA_3S_KEN] = 0,
+    [AREA_3S_SEAN] = 1,    [AREA_3S_URIEN] = 1,     [AREA_3S_AKUMA] = 0,       [AREA_3S_SHIN_AKUMA] = 0,
+    [AREA_3S_CHUNLI] = 0,  [AREA_3S_MAKOTO] = 1,    [AREA_3S_Q] = 1,           [AREA_3S_TWELVE] = 0,
+    [AREA_3S_REMY] = 0,    [AREA_3S_BONUS_CAR] = 0, [AREA_3S_BONUS_BALLS] = 0, [AREA_NG_GILL] = 1,
+    [AREA_NG_ALEX] = 1,    [AREA_NG_RYU_A] = 0,     [AREA_NG_RYU_B] = 0,       [AREA_NG_YUN_A] = 0,
+    [AREA_NG_YUN_B] = 0,   [AREA_NG_DUDLEY_A] = 0,  [AREA_NG_DUDLEY_B] = 0,    [AREA_NG_NECRO] = 1,
+    [AREA_NG_IBUKI_A] = 1, [AREA_NG_IBUKI_B] = 0,   [AREA_NG_IBUKI_C] = 0,     [AREA_NG_ELENA_A] = 1,
+    [AREA_NG_ELENA_B] = 0, [AREA_NG_ORO] = 0,       [AREA_NG_SEAN] = 0,
+};
 
 void Appear_26000(PLW* wk) {
-    // s32 effect_86_init(s16 type86);
-
     switch (wk->wu.routine_no[3]) {
     case 0:
         bg_app_stop = 1;
@@ -1592,7 +1658,7 @@ void animal_decide(PLW* wk) {
 void don_appear_check(PLW* wk) {
     s16 id_w = wk->wu.id ^ 1;
 
-    if (plw[id_w].player_number == 7) {
+    if (plw[id_w].player_number == CHAR_IBUKI) {
         effect_M0_init(wk->wu.rl_flag, 6);
     }
 }
@@ -1604,7 +1670,7 @@ void Appear_30000(PLW* wk) {
         wk->wu.disp_flag = 1;
         bg_app_stop = 1;
         random_16(); // Although the result is unused, I'm keeping the call, because it changes RNG state
-        appear_data_set(wk, (APPEAR_DATA*)appear_data + 24);
+        appear_data_set(wk, &appear_data[24]);
         set_char_move_init(&wk->wu, 9, 0xE);
         break;
 
@@ -1625,7 +1691,7 @@ void Appear_31000(PLW* wk) {
         wk->wu.disp_flag = 1;
 
         if (Appear_flag[wk->wu.id]) {
-            appear_data_set(wk, (APPEAR_DATA*)appear_data);
+            appear_data_set(wk, &appear_data[0]);
             Appear_00000(wk);
         } else {
             set_char_move_init(&wk->wu, 9, 8);
@@ -1939,7 +2005,7 @@ void Appear_39000(PLW* wk) {
         wk->wu.disp_flag = 1;
 
         if (Gill_Appear_Flag) {
-            appear_data_set(wk, (APPEAR_DATA*)appear_data);
+            appear_data_set(wk, &appear_data[0]);
             Appear_00000(wk);
             return;
         }

@@ -7,8 +7,6 @@
 #define HUD_SHIFT 64
 
 #if CPS3
-#define NUM_CHARS 21
-
 typedef enum Character {
     CHAR_GILL = 0,
     CHAR_ALEX = 1,
@@ -31,10 +29,9 @@ typedef enum Character {
     CHAR_Q = 18,
     CHAR_TWELVE = 19,
     CHAR_REMY = 20,
+    CHAR_COUNT,
 } Character;
 #else
-#define NUM_CHARS 20
-
 typedef enum Character : uint16_t {
     CHAR_GILL = 0,
     CHAR_ALEX = 1,
@@ -56,16 +53,108 @@ typedef enum Character : uint16_t {
     CHAR_Q = 17,
     CHAR_TWELVE = 18,
     CHAR_REMY = 19,
+    CHAR_COUNT,
 } Character;
 #endif
 
 #define CHAR_3SX_TO_ARCADE(c) ((c) > CHAR_AKUMA ? (c) + 1 : (c))
 #define CHAR_ARCADE_TO_3SX(c) ((c) > CHAR_AKUMA ? (c) - 1 : (c))
 
+typedef enum Stage {
+    STAGE_3S_GILL = 0,
+    STAGE_3S_ALEX = 1,
+    STAGE_3S_RYU = 2,
+    STAGE_3S_YUN = 3,
+    STAGE_3S_DUDLEY = 4,
+    STAGE_3S_NECRO = 5,
+    STAGE_3S_HUGO = 6,
+    STAGE_3S_IBUKI = 7,
+    STAGE_3S_ELENA = 8,
+    STAGE_3S_ORO = 9,
+    STAGE_3S_YANG = 10,
+    STAGE_3S_KEN = 11,
+    STAGE_3S_SEAN = 12,
+    STAGE_3S_URIEN = 13,
+    STAGE_3S_AKUMA = 14,
+    STAGE_3S_SHIN_AKUMA = 15,
+    STAGE_3S_CHUNLI = 16,
+    STAGE_3S_MAKOTO = 17,
+    STAGE_3S_Q = 18,
+    STAGE_3S_TWELVE = 19,
+    STAGE_3S_REMY = 20,
+    STAGE_3S_BONUS_CAR = 21,
+    STAGE_3S_BONUS_BALLS = 22,
+    STAGE_NG_GILL = 23,
+    STAGE_NG_ALEX = 24,
+    STAGE_NG_RYU = 25,
+    STAGE_NG_YUN = 26,
+    STAGE_NG_DUDLEY = 27,
+    STAGE_NG_NECRO = 28,
+    STAGE_NG_IBUKI = 29,
+    STAGE_NG_ELENA = 30,
+    STAGE_NG_ORO = 31,
+    STAGE_NG_YANG = 32,
+    STAGE_NG_KEN = 33,
+    STAGE_NG_SEAN = 34,
+    STAGE_COUNT,
+} Stage;
+
+typedef enum Area {
+    AREA_3S_GILL = 0,
+    AREA_3S_ALEX = 1,
+    AREA_3S_RYU = 2,
+    AREA_3S_YUN = 3,
+    AREA_3S_DUDLEY = 4,
+    AREA_3S_NECRO = 5,
+    AREA_3S_HUGO = 6,
+    AREA_3S_IBUKI = 7,
+    AREA_3S_ELENA = 8,
+    AREA_3S_ORO = 9,
+    AREA_3S_YANG = 10,
+    AREA_3S_KEN = 11,
+    AREA_3S_SEAN = 12,
+    AREA_3S_URIEN = 13,
+    AREA_3S_AKUMA = 14,
+    AREA_3S_SHIN_AKUMA = 15,
+    AREA_3S_CHUNLI = 16,
+    AREA_3S_MAKOTO = 17,
+    AREA_3S_Q = 18,
+    AREA_3S_TWELVE = 19,
+    AREA_3S_REMY = 20,
+    AREA_3S_BONUS_CAR = 21,
+    AREA_3S_BONUS_BALLS = 22,
+    AREA_NG_GILL = 23,
+    AREA_NG_ALEX = 24,
+    AREA_NG_RYU_A = 25,
+    AREA_NG_RYU_B = 26,
+    AREA_NG_YUN_A = 27,
+    AREA_NG_YUN_B = 28,
+    AREA_NG_DUDLEY_A = 29,
+    AREA_NG_DUDLEY_B = 30,
+    AREA_NG_NECRO = 31,
+    AREA_NG_IBUKI_A = 32,
+    AREA_NG_IBUKI_B = 33,
+    AREA_NG_IBUKI_C = 34,
+    AREA_NG_ELENA_A = 35,
+    AREA_NG_ELENA_B = 36,
+    AREA_NG_ORO = 37,
+    AREA_NG_SEAN = 38,
+    AREA_COUNT,
+} Area;
+
+#define AREA_IS_NG(area) ((area) >= AREA_NG_GILL)
+#define STAGE_OF_CHAR(c) ((Stage)CHAR_3SX_TO_ARCADE(c))
+
 typedef enum JumpDir : uint8_t {
     JUMP_DIR_NEUTRAL = 0,
     JUMP_DIR_FORWARD = 1,
     JUMP_DIR_BACKWARD = 2,
 } JumpDir;
+
+typedef enum PlayType : uint8_t {
+    PLAY_TYPE_PLAYER_VS_CPU,
+    PLAY_TYPE_PLAYER_VS_PLAYER,
+    PLAY_TYPE_COUNT,
+} PlayType;
 
 #endif

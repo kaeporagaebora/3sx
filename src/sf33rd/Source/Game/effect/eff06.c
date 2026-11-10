@@ -9,70 +9,251 @@
 #include "sf33rd/Source/Game/effect/eff05.h"
 #include "sf33rd/Source/Game/effect/effect.h"
 #include "sf33rd/Source/Game/engine/charset.h"
+#include "sf33rd/Source/Game/engine/slowf.h"
+#include "sf33rd/Source/Game/engine/workuser.h"
 #include "sf33rd/Source/Game/rendering/aboutspr.h"
 #include "sf33rd/Source/Game/rendering/texcash.h"
 #include "sf33rd/Source/Game/stage/bg.h"
 #include "sf33rd/Source/Game/stage/bg_sub.h"
 #include "sf33rd/Source/Game/stage/ta_sub.h"
 
-const s16 scr_obj_num6[22] = { 1, 6, 4, 0, 3, 1, 0, 2, 8, 3, 0, 4, 3, 0, 1, 1, 4, 0, 1, 1, 0, 0 };
+const s16 scr_obj_num6[AREA_COUNT] = {
+    [AREA_3S_GILL] = 1,    [AREA_3S_ALEX] = 6,      [AREA_3S_RYU] = 4,         [AREA_3S_YUN] = 0,
+    [AREA_3S_DUDLEY] = 3,  [AREA_3S_NECRO] = 1,     [AREA_3S_HUGO] = 0,        [AREA_3S_IBUKI] = 2,
+    [AREA_3S_ELENA] = 8,   [AREA_3S_ORO] = 3,       [AREA_3S_YANG] = 0,        [AREA_3S_KEN] = 4,
+    [AREA_3S_SEAN] = 3,    [AREA_3S_URIEN] = 0,     [AREA_3S_AKUMA] = 1,       [AREA_3S_SHIN_AKUMA] = 1,
+    [AREA_3S_CHUNLI] = 1,  [AREA_3S_MAKOTO] = 4,    [AREA_3S_Q] = 0,           [AREA_3S_TWELVE] = 1,
+    [AREA_3S_REMY] = 1,    [AREA_3S_BONUS_CAR] = 0, [AREA_3S_BONUS_BALLS] = 0, [AREA_NG_GILL] = 10,
+    [AREA_NG_ALEX] = 8,    [AREA_NG_RYU_A] = 4,     [AREA_NG_RYU_B] = 11,      [AREA_NG_YUN_A] = 7,
+    [AREA_NG_YUN_B] = 3,   [AREA_NG_DUDLEY_A] = 12, [AREA_NG_DUDLEY_B] = 15,   [AREA_NG_NECRO] = 17,
+    [AREA_NG_IBUKI_A] = 2, [AREA_NG_IBUKI_B] = 2,   [AREA_NG_IBUKI_C] = 2,     [AREA_NG_ELENA_A] = 9,
+    [AREA_NG_ELENA_B] = 2, [AREA_NG_ORO] = 10,      [AREA_NG_SEAN] = 2,
+};
 
-const s16 st0000_data_tbl[8] = { 0, 2, 8492, 640, 48, 82, 0, 0 };
+const s16 st0000_data_tbl[9] = {
+    0, 2, 8492, 640, 48, 82, 0, 0, 0,
+};
 
-const s16 st0100_data_tbl[48] = { 0, 1, 300,  648, 48, 86, 1,  0, 0, 1, 300,  728, 48, 86, 2,  0,
-                                  0, 1, 300,  792, 48, 86, 3,  0, 0, 2, 8492, 648, 16, 10, 18, 0,
-                                  0, 2, 8492, 416, 48, 70, 20, 0, 0, 2, 8492, 264, 48, 72, 21, 0 };
+const s16 st0100_data_tbl[54] = {
+    0, 1, 300,  648, 48, 86, 1,  0, 0, 0, 1, 300,  728, 48, 86, 2,  0, 0, 0, 1, 300,  792, 48, 86, 3,  0, 0,
+    0, 2, 8492, 648, 16, 10, 18, 0, 0, 0, 2, 8492, 416, 48, 70, 20, 0, 0, 0, 2, 8492, 264, 48, 72, 21, 0, 0,
+};
 
-const s16 st0B00_data_tbl[32] = { 0, 1, 300, 648, 48, 86, 1, 0, 0, 1, 300, 728, 48,  86, 2,  0,
-                                  0, 1, 300, 792, 48, 86, 3, 0, 0, 2, 300, 463, 193, 83, 22, 0 };
+const s16 st0B00_data_tbl[36] = {
+    0, 1, 300, 648, 48, 86, 1, 0, 0, 0, 1, 300, 728, 48,  86, 2,  0, 0,
+    0, 1, 300, 792, 48, 86, 3, 0, 0, 0, 2, 300, 463, 193, 83, 22, 0, 0,
+};
 
-const s16 st0200_data_tbl[32] = { 0, 6, 8492, 160, 64, 86, 0, 0, 0, 6, 8492, 224, 64, 86, 1, 0,
-                                  0, 6, 8492, 336, 64, 86, 2, 0, 0, 6, 8492, 432, 64, 86, 3, 0 };
+const s16 st0200_data_tbl[36] = {
+    0, 6, 8492, 160, 64, 86, 0, 0, 0, 0, 6, 8492, 224, 64, 86, 1, 0, 0,
+    0, 6, 8492, 336, 64, 86, 2, 0, 0, 0, 6, 8492, 432, 64, 86, 3, 0, 0,
+};
 
-const s16 st0A00_data_tbl[48] = { 0, 3, 300, 448, 16, 88, 9,  0, 0, 3, 300, 528, 16, 88, 11, 0,
-                                  0, 3, 300, 608, 16, 88, 12, 0, 0, 3, 300, 688, 16, 88, 13, 0,
-                                  0, 3, 300, 768, 16, 88, 14, 0, 0, 3, 300, 848, 16, 88, 15, 0 };
+const s16 st0A00_data_tbl[54] = {
+    0, 3, 300, 448, 16, 88, 9,  0, 0, 0, 3, 300, 528, 16, 88, 11, 0, 0, 0, 3, 300, 608, 16, 88, 12, 0, 0,
+    0, 3, 300, 688, 16, 88, 13, 0, 0, 0, 3, 300, 768, 16, 88, 14, 0, 0, 0, 3, 300, 848, 16, 88, 15, 0, 0,
+};
 
-const s16 st0400_data_tbl[24] = { 0,  2,  8492, 672, 24, 10, 0,   0,   0, 2,  300, 416,
-                                  72, 82, 1,    0,   0,  2,  300, 192, 0, 10, 12,  0 };
+const s16 st0400_data_tbl[27] = {
+    0, 2, 8492, 672, 24, 10, 0, 0, 0, 0, 2, 300, 416, 72, 82, 1, 0, 0, 0, 2, 300, 192, 0, 10, 12, 0, 0,
+};
 
-const s16 st0500_data_tbl[56] = { 0,   3, 8492, 432, 0,   82,  8, 0,   0,   2, 300, 160, 0,   84,  0, 0,   0,   2, 300,
-                                  256, 0, 84,   1,   0,   0,   2, 300, 352, 0, 84,  2,   0,   0,   2, 300, 672, 0, 84,
-                                  5,   0, 0,    2,   300, 768, 0, 84,  6,   0, 0,   2,   300, 864, 0, 84,  7,   0 };
+const s16 st0500_data_tbl[63] = {
+    0,   3, 8492, 432, 0, 82,  8,   0, 0,   0,   2, 300, 160, 0, 84,  0,   0, 0,   0,   2, 300,
+    256, 0, 84,   1,   0, 0,   0,   2, 300, 352, 0, 84,  2,   0, 0,   0,   2, 300, 672, 0, 84,
+    5,   0, 0,    0,   2, 300, 768, 0, 84,  6,   0, 0,   0,   2, 300, 864, 0, 84,  7,   0, 0,
+};
 
-const s16 st1300_data_tbl[56] = { 0, 3,  8492, 432, 0, 82, 20,  0,   0, 2,  300, 160, 0, 84, 12,  0,   0, 2,  300, 256,
-                                  0, 84, 13,   0,   0, 2,  300, 352, 0, 84, 14,  0,   0, 2,  300, 672, 0, 84, 17,  0,
-                                  0, 2,  300,  768, 0, 84, 18,  0,   0, 2,  300, 864, 0, 84, 19,  0 };
+const s16 st1300_data_tbl[63] = {
+    0,   3, 8492, 432, 0, 82,  20,  0, 0,   0,   2, 300, 160, 0, 84,  12,  0, 0,   0,   2, 300,
+    256, 0, 84,   13,  0, 0,   0,   2, 300, 352, 0, 84,  14,  0, 0,   0,   2, 300, 672, 0, 84,
+    17,  0, 0,    0,   2, 300, 768, 0, 84,  18,  0, 0,   0,   2, 300, 864, 0, 84,  19,  0, 0,
+};
 
-const s16 st0700_data_tbl[16] = { 0, 6, 8492, 288, 80, 93, 0, 0, 0, 6, 8492, 416, 48, 93, 1, 0 };
+const s16 st0700_data_tbl[18] = {
+    0, 6, 8492, 288, 80, 93, 0, 0, 0, 0, 6, 8492, 416, 48, 93, 1, 0, 0,
+};
 
-const s16 st0800_data_tbl[88] = { 0,   7,   8492, 256,  43,   88,   10,   0,    0,   7,  8492, 384,  43,   88,   11,
-                                  0,   0,   7,    8492, 752,  43,   88,   16,   0,   0,  2,    8492, 192,  48,   86,
-                                  0,   0,   0,    2,    8492, 576,  48,   86,   2,   0,  0,    2,    8492, 800,  48,
-                                  86,  3,   0,    0,    6,    8492, 640,  128,  85,  6,  0,    0,    6,    8492, 368,
-                                  160, 85,  7,    0,    0,    2,    8492, 336,  88,  86, 6,    0,    0,    6,    8492,
-                                  514, 136, 86,   8,    0,    0,    6,    8492, 722, 56, 86,   9,    0 };
+const s16 st0800_data_tbl[99] = {
+    0, 7, 8492, 256, 43,  88, 10, 0, 0, 0, 7, 8492, 384, 43,  88, 11, 0, 0, 0, 7, 8492, 752, 43, 88, 16, 0, 0,
+    0, 2, 8492, 192, 48,  86, 0,  0, 0, 0, 2, 8492, 576, 48,  86, 2,  0, 0, 0, 2, 8492, 800, 48, 86, 3,  0, 0,
+    0, 6, 8492, 640, 128, 85, 6,  0, 0, 0, 6, 8492, 368, 160, 85, 7,  0, 0, 0, 2, 8492, 336, 88, 86, 6,  0, 0,
+    0, 6, 8492, 514, 136, 86, 8,  0, 0, 0, 6, 8492, 722, 56,  86, 9,  0, 0,
+};
 
-const s16 st0900_data_tbl[24] = { 0,  3,  8492, 464, 64, 86, 6,    0,   0,  7,  8492, 512,
-                                  96, 88, 7,    0,   0,  6,  8492, 832, 16, 10, 5,    0 };
+const s16 st0900_data_tbl[27] = {
+    0, 3, 8492, 464, 64, 86, 6, 0, 0, 0, 7, 8492, 512, 96, 88, 7, 0, 0, 0, 6, 8492, 832, 16, 10, 5, 0, 0,
+};
 
-const s16 st0c00_data_tbl[24] = { 0,  3,  8492, 464, 64, 86, 0,    0,   0,  7,  8492, 512,
-                                  96, 88, 1,    0,   0,  6,  8492, 832, 16, 10, 5,    0 };
+const s16 st0c00_data_tbl[27] = {
+    0, 3, 8492, 464, 64, 86, 0, 0, 0, 0, 7, 8492, 512, 96, 88, 1, 0, 0, 0, 6, 8492, 832, 16, 10, 5, 0, 0,
+};
 
-const s16 st0e00_data_tbl[8] = { 0, 2, 8492, 592, 16, 10, 0, 0 };
+const s16 st0e00_data_tbl[9] = {
+    0, 2, 8492, 592, 16, 10, 0, 0, 0,
+};
 
-const s16 st1000_data_tbl[16] = { 0, 2, 8492, 448, 16, 14, 1, 0, 0, 2, 8492, 928, 32, 72, 3, 0 };
+const s16 st1000_data_tbl[18] = {
+    0, 2, 8492, 448, 16, 14, 1, 0, 0, 0, 2, 8492, 928, 32, 72, 3, 0, 0,
+};
 
-const s16 st1100_data_tbl[32] = { 0, 1, 8492, 256, 64,  90, 0, 0, 0, 1, 8492, 384, 128, 90, 1, 0,
-                                  0, 1, 8492, 624, 128, 90, 4, 0, 0, 3, 8492, 784, 128, 10, 7, 0 };
+const s16 st1100_data_tbl[36] = {
+    0, 1, 8492, 256, 64,  90, 0, 0, 0, 0, 1, 8492, 384, 128, 90, 1, 0, 0,
+    0, 1, 8492, 624, 128, 90, 4, 0, 0, 0, 3, 8492, 784, 128, 10, 7, 0, 0,
+};
 
-const s16 st1400_data_tbl[8] = { 0, 3, 300, 496, 64, 88, 4, 0 };
+const s16 st1400_data_tbl[9] = {
+    0, 3, 300, 496, 64, 88, 4, 0, 0,
+};
 
-const s16* scr_obj_data6[22] = { st0000_data_tbl,  st0100_data_tbl,  st0200_data_tbl, stg_dum_data_tbl, st0400_data_tbl,
-                                 st0500_data_tbl,  stg_dum_data_tbl, st0700_data_tbl, st0800_data_tbl,  st0900_data_tbl,
-                                 st0A00_data_tbl,  st0B00_data_tbl,  st0c00_data_tbl, st0100_data_tbl,  st0e00_data_tbl,
-                                 st1000_data_tbl,  st1100_data_tbl,  st0500_data_tbl, st1300_data_tbl,  st1400_data_tbl,
-                                 stg_dum_data_tbl, stg_dum_data_tbl };
+/// New Generation's Gill stage. Colour codes are converted from palette row 0x40 to the PS2 BG palette row 0x12C, both
+/// with the 0x2000 flag (0x2040 -> 8492) and without it (0x40 -> 300).
+const s16 ng_st0000_data_tbl[90] = {
+    1,  2,   8492, 182, 80, 80,   8,    1,   0,  1,  2,    300, 784, 80, 82,   2,   0,   0,   0,  2,   8492, 304, 80,
+    80, 0,   1,    0,   0,  2,    8492, 592, 80, 80, 1,    0,   0,   0,  2,    300, 704, 256, 82, 3,   0,    0,   1,
+    2,  300, 224,  80,  81, 5,    0,    0,   1,  2,  8492, 368, 288, 81, 6,    0,   0,   1,   2,  300, 190,  272, 82,
+    7,  0,   0,    0,   2,  8492, 256,  64,  83, 21, 0,    0,   0,   2,  8492, 768, 64,  83,  24, 0,   0,
+};
+
+/// New Generation's Alex stage. Colour codes are converted from palette rows 0x40 and 0x5C to the PS2 BG palette rows
+/// 0x12C and 0x148.
+const s16 ng_st0100_data_tbl[72] = {
+    1, 3, 8492, 674,  113,  104, 2,  0,  0, 1, 2, 8520, 895,  32,   20,  33, 1,  0, 1, 2, 8492, 784,  64,  83, 0,  0,
+    0, 0, 2,    8492, 368,  16,  22, 4,  0, 0, 0, 2,    8492, 688,  16,  22, 5,  0, 0, 0, 2,    8492, 864, 16, 22, 6,
+    0, 0, 0,    2,    8492, 272, 56, 83, 7, 0, 0, 1,    1,    8492, 752, 86, 90, 8, 0, 0,
+};
+
+/// First area of New Generation's Ryu stage. Colour codes are converted from palette rows 0x40 and 0x63 to the PS2 BG
+/// palette rows 0x12C and 0x14F, both with the 0x2000 flag and without it.
+const s16 ng_st0200_data_tbl[36] = {
+    1, 2, 8492, 303,  122, 76, 10, 1, 1, 1, 2, 8492, 239, 192, 77, 13, 1, 1,
+    1, 2, 8527, -288, 64,  74, 20, 1, 1, 1, 2, 335,  256, 48,  74, 21, 1, 1,
+};
+
+/// Second area of New Generation's Ryu stage. Colour codes are converted from palette rows 0x40 and 0x5A to the PS2 BG
+/// palette rows 0x12C and 0x146, both with the 0x2000 flag and without it.
+const s16 ng_st0210_data_tbl[99] = {
+    1, 2, 8492, -394, 80, 83, 0,  1, 1, 1, 2, 8492, -384, 64, 82, 1,  1, 1, 0, 2, 300,  208,  96, 80, 3,  1, 1,
+    1, 2, 300,  -128, 80, 83, 5,  1, 1, 0, 2, 8518, -145, 64, 77, 10, 1, 1, 1, 2, 8518, -233, 81, 79, 14, 1, 1,
+    1, 2, 8518, -217, 64, 78, 15, 0, 1, 1, 2, 8518, -265, 59, 77, 16, 0, 1, 1, 2, 8518, 273,  65, 74, 18, 1, 1,
+    1, 2, 8518, 264,  97, 80, 22, 0, 1, 1, 2, 8518, 424,  97, 76, 23, 0, 1,
+};
+
+/// First area of New Generation's Yun stage. Colour codes are converted from palette rows 0x40 and 0x55 to the PS2 BG
+/// palette rows 0x12C and 0x141.
+const s16 ng_st0300_data_tbl[63] = {
+    0,   1,  8492, 736, 112, 102,  35,  0,  0,    0,   2,  8492, 640, 64, 93,   4,   0,   0,    1,   2,   8513,
+    272, 95, 76,   26,  1,   0,    0,   2,  8492, 852, 24, 23,   0,   0,  0,    0,   2,   8492, 624, 136, 95,
+    5,   0,  0,    1,   2,   8513, 336, 47, 77,   16,  1,  0,    1,   2,  8513, 231, 296, 92,   27,  0,   0,
+};
+
+/// Second area of New Generation's Yun stage (areas 1 and 2 in NG). Colour codes are converted from palette row 0x40 to
+/// the PS2 BG palette row 0x12C.
+const s16 ng_st0310_data_tbl[27] = {
+    1, 2, 8492, 288, 32, 88, 2, 0, 0, 0, 2, 8492, 512, 128, 103, 9, 0, 0, 1, 2, 8492, 736, 24, 23, 62, 0, 0,
+};
+
+/// First area of New Generation's Dudley stage. Colour codes are converted from palette row 0x40 to the PS2 BG palette
+/// row 0x12C.
+const s16 ng_st0400_data_tbl[108] = {
+    0, 2, 8492, 79,   49,  78,  28, 0, 1, 0, 2, 8492, 191,  128, 78,  29, 0, 1, 0, 2, 8492, 256,  48,  78,  3,  0, 1,
+    0, 2, 300,  -146, 224, 80,  9,  0, 1, 0, 2, 300,  -256, 224, 80,  33, 0, 1, 0, 2, 300,  -352, 224, 80,  34, 0, 1,
+    0, 2, 300,  208,  208, 102, 35, 0, 1, 0, 2, 300,  160,  208, 102, 36, 0, 1, 0, 2, 300,  320,  208, 102, 37, 0, 1,
+    1, 2, 8492, -273, 160, 78,  1,  1, 1, 1, 2, 8492, -257, 48,  79,  2,  0, 1, 0, 2, 8492, -160, 48,  79,  4,  0, 1,
+};
+
+/// Second area of New Generation's Dudley stage (areas 1 and 2 in NG). Colour codes are converted from palette rows
+/// 0x40 and 0x58 to the PS2 BG palette rows 0x12C and 0x144.
+const s16 ng_st0410_data_tbl[135] = {
+    1, 2, 8492, -273, 160, 78,  1,  1, 1, 0, 2, 8492, 79,   49,  78,  28, 0, 1, 0, 2, 8492, 191,  128, 78,  29, 0, 1,
+    0, 2, 8492, 256,  48,  78,  3,  0, 1, 0, 2, 300,  -146, 224, 80,  9,  0, 1, 0, 2, 300,  -256, 224, 80,  33, 0, 1,
+    0, 2, 300,  -352, 224, 80,  34, 0, 1, 0, 2, 300,  208,  160, 102, 7,  0, 1, 0, 2, 300,  112,  160, 102, 30, 0, 1,
+    0, 2, 300,  160,  160, 102, 31, 0, 1, 0, 2, 300,  320,  160, 102, 32, 0, 1, 1, 2, 8492, -257, 48,  79,  2,  0, 1,
+    0, 2, 8492, -128, 80,  80,  5,  0, 1, 1, 2, 8516, 224,  48,  76,  24, 0, 1, 1, 2, 8516, 224,  160, 100, 25, 0, 1,
+};
+
+/// New Generation's Necro stage. Colour codes are converted from palette rows 0x40 and 0x59 to the PS2 BG palette rows
+/// 0x12C and 0x145.
+const s16 ng_st0500_data_tbl[153] = {
+    0, 2, 8492, 663, 136, 75, 8,  1, 0, 0, 2, 8492, 683, 123, 75, 9,  1, 0, 1, 2, 8492, 775, 144, 75, 10, 1, 0,
+    1, 2, 8492, 640, 48,  75, 11, 1, 0, 1, 2, 8492, 224, 64,  80, 5,  0, 0, 1, 2, 300,  168, 16,  6,  0,  0, 0,
+    1, 2, 300,  96,  107, 75, 1,  0, 0, 1, 2, 300,  96,  107, 75, 2,  0, 0, 1, 2, 8492, 360, 104, 75, 13, 1, 0,
+    1, 2, 8492, 372, 104, 75, 20, 1, 0, 1, 2, 8492, 908, 101, 75, 6,  1, 0, 1, 2, 8492, 53,  145, 75, 7,  1, 0,
+    1, 2, 8492, 880, 16,  6,  17, 0, 0, 1, 2, 8517, 364, 146, 79, 23, 0, 0, 1, 2, 8517, 288, 256, 75, 24, 0, 0,
+    1, 2, 8517, 352, 225, 75, 26, 1, 0, 0, 2, 8517, 368, 147, 75, 27, 1, 0,
+};
+
+/// New Generation's Ibuki stage. Colour codes are converted from palette row 0x40 to the PS2 BG palette row 0x12C.
+const s16 ng_st0700_data_tbl[18] = {
+    0, 2, 8492, 737, 16, 18, 5, 1, 0, 0, 2, 8492, 640, 176, 82, 6, 1, 0,
+};
+
+/// New Generation's Elena stage, first area: the cliffs on both sides of the rope bridge. Colour codes are converted
+/// from palette row 0x40 to the PS2 BG palette row 0x12C.
+const s16 ng_st0800_data_tbl[81] = {
+    0, 2, 300,  720, 0,  78, 2,  0, 0, 0, 2, 300,  752, 96,   20, 14, 0, 0, 0, 2, 8492, 752, 0, 78, 3,  0, 0,
+    0, 2, 8492, 272, 96, 20, 15, 0, 0, 0, 2, 8492, 752, -256, 78, 4,  0, 0, 0, 2, 300,  304, 0, 78, 5,  0, 0,
+    0, 2, 8492, 272, 0,  78, 6,  0, 0, 0, 2, 8492, 272, -256, 78, 7,  0, 0, 0, 3, 8492, 656, 0, 79, 13, 1, 0,
+};
+
+/// New Generation's Elena stage, second and third areas. Colour codes are converted from palette rows 0x40 and 0x60 to
+/// the PS2 BG palette rows 0x12C and 0x14C.
+const s16 ng_st0810_data_tbl[18] = {
+    1, 3, 8492, 384, 96, 86, 2, 0, 0, 1, 2, 8524, 718, 44, 80, 17, 1, 0,
+};
+
+/// New Generation's Oro stage. Colour codes are converted from palette row 0x40 to the PS2 BG palette row 0x12C.
+const s16 ng_st0900_data_tbl[90] = {
+    1, 2, 8492, 816, 112, 79, 0, 1, 0, 1, 2, 8492, 800, 112, 81, 2, 1, 0, 1, 2, 8492, 792, 176, 80, 3,  1, 0,
+    1, 1, 8492, 224, 192, 95, 4, 1, 0, 1, 1, 8492, 320, 176, 95, 5, 1, 0, 1, 1, 8492, 352, 176, 95, 6,  1, 0,
+    0, 2, 8492, 656, 128, 74, 7, 0, 0, 0, 2, 8492, 840, 160, 83, 8, 1, 0, 1, 2, 8492, 256, 53,  79, 10, 0, 0,
+    1, 2, 8492, 720, 96,  90, 9, 1, 0,
+};
+
+/// New Generation's Sean stage. Colour codes are converted from palette row 0x40 to the PS2 BG palette row 0x12C.
+const s16 ng_st0c00_data_tbl[18] = { 1, 2, 8492, 192, 56, 82, 0, 0, 0, 0, 2, 300, 624, 192, 79, 4, 1, 0 };
+
+const s16* scr_obj_data6[AREA_COUNT] = {
+    [AREA_3S_GILL] = st0000_data_tbl,
+    [AREA_3S_ALEX] = st0100_data_tbl,
+    [AREA_3S_RYU] = st0200_data_tbl,
+    [AREA_3S_YUN] = stg_dum_data_tbl,
+    [AREA_3S_DUDLEY] = st0400_data_tbl,
+    [AREA_3S_NECRO] = st0500_data_tbl,
+    [AREA_3S_HUGO] = stg_dum_data_tbl,
+    [AREA_3S_IBUKI] = st0700_data_tbl,
+    [AREA_3S_ELENA] = st0800_data_tbl,
+    [AREA_3S_ORO] = st0900_data_tbl,
+    [AREA_3S_YANG] = st0A00_data_tbl,
+    [AREA_3S_KEN] = st0B00_data_tbl,
+    [AREA_3S_SEAN] = st0c00_data_tbl,
+    [AREA_3S_URIEN] = st0100_data_tbl,
+    [AREA_3S_AKUMA] = st0e00_data_tbl,
+    [AREA_3S_SHIN_AKUMA] = st0e00_data_tbl,
+    [AREA_3S_CHUNLI] = st1000_data_tbl,
+    [AREA_3S_MAKOTO] = st1100_data_tbl,
+    [AREA_3S_Q] = st0500_data_tbl,
+    [AREA_3S_TWELVE] = st1300_data_tbl,
+    [AREA_3S_REMY] = st1400_data_tbl,
+    [AREA_3S_BONUS_CAR] = stg_dum_data_tbl,
+    [AREA_3S_BONUS_BALLS] = stg_dum_data_tbl,
+    [AREA_NG_GILL] = ng_st0000_data_tbl,
+    [AREA_NG_ALEX] = ng_st0100_data_tbl,
+    [AREA_NG_RYU_A] = ng_st0200_data_tbl,
+    [AREA_NG_RYU_B] = ng_st0210_data_tbl,
+    [AREA_NG_YUN_A] = ng_st0300_data_tbl,
+    [AREA_NG_YUN_B] = ng_st0310_data_tbl,
+    [AREA_NG_DUDLEY_A] = ng_st0400_data_tbl,
+    [AREA_NG_DUDLEY_B] = ng_st0410_data_tbl,
+    [AREA_NG_NECRO] = ng_st0500_data_tbl,
+    [AREA_NG_IBUKI_A] = ng_st0700_data_tbl,
+    [AREA_NG_IBUKI_B] = ng_st0700_data_tbl,
+    [AREA_NG_IBUKI_C] = ng_st0700_data_tbl,
+    [AREA_NG_ELENA_A] = ng_st0800_data_tbl,
+    [AREA_NG_ELENA_B] = ng_st0810_data_tbl,
+    [AREA_NG_ORO] = ng_st0900_data_tbl,
+    [AREA_NG_SEAN] = ng_st0c00_data_tbl,
+};
 
 void effect_06_move(WORK_Other* ewk) {
     if (obr_no_disp_check()) {
@@ -92,7 +273,16 @@ void effect_06_move(WORK_Other* ewk) {
             break;
         }
 
-        disp_pos_trans_entry_rs(ewk);
+        if (ewk->wu.hit_stop && !EXE_flag && !Game_pause && !EXE_obroll) {
+            char_move(&ewk->wu);
+        }
+
+        if (AREA_IS_NG(bg_w.bg_index)) {
+            disp_pos_trans_entry_rs_ng(ewk);
+        } else {
+            disp_pos_trans_entry_rs(ewk);
+        }
+
         break;
 
     default:
@@ -115,7 +305,7 @@ s32 effect_06_init() {
 
     if (Config_GetBool(CFG_DRAW_PLAYERS_ABOVE_HUD)) {
         switch (bg_w.bg_index) {
-        case 16:         // Makoto's stage
+        case AREA_3S_MAKOTO:
             lp_cnt -= 1; // Remove large tree on the right
             break;
         }
@@ -144,6 +334,7 @@ s32 effect_06_init() {
         ewk->wu.xyz[1].disp.pos = *data_ptr++;
         ewk->wu.my_priority = ewk->wu.position_z = *data_ptr++;
         ewk->wu.char_index = *data_ptr++;
+        ewk->wu.hit_stop = *data_ptr++; // Animate every frame
         ewk->wu.sync_suzi = *data_ptr++;
         suzi_offset_set(ewk);
         ewk->wu.my_mts = 7;

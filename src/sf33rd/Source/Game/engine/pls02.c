@@ -1017,6 +1017,10 @@ void add_sp_arts_gauge_nagenuke(PLW* wk) { // 🟢 Difficulty handling differs
 
 #if !CPS3
 void add_sp_arts_gauge_maxbit(PLW* wk) { // 🔴
+    if (!Is_Training_Mode(Mode_Type)) {
+        return;
+    }
+
     if (pcon_rno[0] != 1) {
         return;
     }
@@ -1030,13 +1034,13 @@ void add_sp_arts_gauge_maxbit(PLW* wk) { // 🔴
         return;
     }
 
-    if (!(wk->spmv_ng_flag2 & 0x80000)) {
+    if (!(wk->spmv_ng_flag2 & DIP2_SA_GAUGE_AUTO_MAX_DISABLED)) {
         sag_inc_timer[wk->wu.id] = 2;
         add_super_arts_gauge(wk->sa, wk->wu.id, wk->sa->gauge_len, wk->metamorphose);
         return;
     }
 
-    if (!(wk->spmv_ng_flag2 & 0x10000)) {
+    if (!(wk->spmv_ng_flag2 & DIP2_SA_GAUGE_AUTO_FILL_DISABLED)) {
         if (sag_inc_timer[wk->wu.id]) {
             sag_inc_timer[wk->wu.id]--;
             return;
@@ -1188,10 +1192,11 @@ void dead_voice_request() { // 🟢
     dead_voice_flag = false;
 }
 
-void dead_voice_request2(PLW* wk) { // 🟢
+void dead_voice_request2(PLW* wk) { // 🟡
     s16 secd1;
     s16 secd2;
     s16 ks = 0;
+    s16 dm_rno;
 
     if (wk->metamorphose != 0 && Country != 8) {
         ks = 0x600;
@@ -1200,7 +1205,13 @@ void dead_voice_request2(PLW* wk) { // 🟢
     secd1 = dead_voice_table[wk->player_number][0];
     secd2 = dead_voice_table[wk->player_number][1];
 
-    if ((wk->wu.routine_no[1] == 1) && atsagct[wk->wu.routine_no[2]] & 0x10) {
+    dm_rno = wk->wu.routine_no[2];
+
+    if (wk->wu.routine_no[3] == 0) {
+        dm_rno = dm_reaction_table[dm_rno].r_no;
+    }
+
+    if ((wk->wu.routine_no[1] == 1) && atsagct[dm_rno] & 0x10) {
         sound_effect_request[secd2]((WORK_Other*)wk, secd2 + ks);
     } else {
         sound_effect_request[secd1]((WORK_Other*)wk, secd1 + ks);

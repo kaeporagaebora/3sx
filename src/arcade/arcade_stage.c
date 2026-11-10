@@ -1,0 +1,1334 @@
+#include "arcade/arcade_stage.h"
+#include "arcade/arcade_cg.h"
+#include "arcade/byte_buffer.h"
+#include "arcade/rom/cps3_dma.h"
+#include "port/io/cache.h"
+#include "sf33rd/Source/Game/rendering/texgroup_data.h"
+#include "sf33rd/Source/Game/stage/bg_data.h"
+
+#include <zlib.h>
+
+/// Offset of SIMM5 in the graphics region
+#define SIMM5_OFFSET 0x2000000
+
+/// Palette rows copied from the graphics region
+typedef struct PaletteSource {
+    RomGame game;
+    Uint32 offset;
+    int rows;
+    size_t row_stride; // Colors from the start of one row to the next
+
+    /// Whether the first color of each row is always transparent. Sprite palettes need it.
+    bool transparent_pen;
+
+    CacheFile file;
+} PaletteSource;
+
+static const PaletteSource palette_sources[] = {
+    // BG palette block in SIMM5. Each stage stores its normal block followed by a faded one of the same size.
+    { .game = ROM_GAME_SFIII3,
+      .offset = SIMM5_OFFSET + 0xF4D280,
+      .rows = 17,
+      .row_stride = 64,
+      .file = CACHE_FILE_SHIN_AKUMA_BG_PALETTE },
+
+    // Ibuki's tanuki (effect 94) for each of Ibuki's NG colors. NG loads it with each color's palette 5.
+    { .game = ROM_GAME_SFIII,
+      .offset = 0x23D5300,
+      .rows = 6,
+      .row_stride = 128,
+      .transparent_pen = true,
+      .file = CACHE_FILE_NG_EF94_PALETTE },
+};
+
+/// Program tables that the stage conversion reads. Most are indexed by bg_index.
+typedef struct StageTables {
+    Uint32 use_scr;          // s16: number of scroll layers
+    Uint32 bg_cg_tbl;        // {u32 dictionary, u32 size, u32 source, u32 mode}: tile DMA, word addresses
+    Uint32 bg_pal_tbl;       // s16: palette_load id
+    Uint32 bg_pal_base_tbl;  // s16: palette code that map entries are relative to
+    Uint32 bg_block_count;   // s16[4]: map blocks per layer
+    Uint32 bg_map_base;      // u32: map blocks of 16x16 entries
+    Uint32 bg_block_list;    // u32[4]: {u32 tilemap offset, u32 block index} lists, in RAM
+    Uint32 palette_load_tbl; // {u32 source, u32 destination, u32 size}, in bytes, indexed by palette id
+    Uint32 ram_image;        // Initialized RAM at 0x02000000 is copied from here at boot
+    Uint32 cg_table;         // CG entries, indexed by CG number. They end with the descriptor address.
+    Uint32 cg_entry_size;
+    Uint32 cg_origin_offset; // Offset of the s16 origin x within a CG entry. Origin y follows it.
+} StageTables;
+
+static const StageTables stage_tables[ROM_GAME_COUNT] = {
+    [ROM_GAME_SFIII] = {
+        .use_scr = 0x0640B658,
+        .bg_cg_tbl = 0x0640BEEC,
+        .bg_pal_tbl = 0x0640D6E8,
+        .bg_pal_base_tbl = 0x0640C14C,
+        .bg_block_count = 0x0640C184,
+        .bg_map_base = 0x0640C25C,
+        .bg_block_list = 0x02005CC4,
+        .palette_load_tbl = 0x0642D74C,
+        .ram_image = 0x0643BC60,
+        .cg_table = 0x06500000,
+        .cg_entry_size = 12,
+        .cg_origin_offset = 2,
+    },
+};
+
+#define MAX_OBJECT_PALETTES 4
+#define MAX_REWRITE_CHIPS 128
+#define MAX_PALETTE_STEPS 2
+#define MAX_BLOCK_WRITES 2
+#define MAX_LAYER_WRITES 2
+
+/// A step of NG's effect 14, which animates a layer by cycling the palettes of a rectangle of tilemap cells
+typedef struct PaletteStep {
+    int variant;
+    int step; // Index in the variant's palette sequence
+} PaletteStep;
+
+/// A map block that stage code writes over part of a layer's tilemap (NG's `bg_write_block`)
+typedef struct BlockWrite {
+    Uint32 offset; // Tilemap offset in bytes
+    int block;     // Index of the stage's map block
+} BlockWrite;
+
+/// Columns of a map block that stage setup code writes over part of a layer's tilemap (NG's `bg0701_rewrite`)
+typedef struct LayerWrite {
+    int layer;
+    Uint32 offset; // Tilemap offset in bytes
+    int block;     // Index of the stage's map block
+    int first_column;
+    int columns;
+} LayerWrite;
+
+/// A chip of an alternate tilemap that the stage swaps in to animate a layer. It becomes a rewrite chip, which the PPG
+/// stores after the layer chips.
+typedef struct RewriteChip {
+    Uint32 blocks; // {u32 tilemap offset, u32 block index} list of the alternate tilemap, or 0 for the layer's own
+    int block_count;
+    int layer; // Used when `blocks` is 0
+    int chip;
+
+    /// Effect 14 steps applied to the tilemap
+    PaletteStep palette_steps[MAX_PALETTE_STEPS];
+    int palette_step_count;
+
+    /// Blocks written over the tilemap
+    BlockWrite block_writes[MAX_BLOCK_WRITES];
+    int block_write_count;
+} RewriteChip;
+
+/// An arcade stage, converted to a PS2-style palette and stage PPG
+typedef struct StageSource {
+    RomGame game;
+    int bg_index;
+    Area area;
+    CacheFile palette_file;
+    CacheFile ppg_file;
+
+    /// Palettes that the stage's setup code loads for its objects. They follow the stage palette.
+    int object_palettes[MAX_OBJECT_PALETTES];
+    int object_palette_count;
+
+    /// Writes over the layer tilemaps. They stay for the whole stage, so the layer chips include them.
+    LayerWrite layer_writes[MAX_LAYER_WRITES];
+    int layer_write_count;
+
+    /// Must match `rewrite_scr` and the stage's `bgrw_data_tbl` entries
+    RewriteChip rewrite_chips[MAX_REWRITE_CHIPS];
+    int rewrite_chip_count;
+} StageSource;
+
+/// Alternate tilemaps of Gill's stage. NG's effect 12 cycles through them to animate the lava of layer 0.
+#define NG_GILL_LAVA_MAP_0 0x0643275C
+#define NG_GILL_LAVA_MAP_1 0x064327DC
+
+#define NG_DUDLEY_RAIN_MAPS 0x06432464
+#define NG_DUDLEY_RAIN_CHIP(map_index, chip_index)                                                                     \
+    { .blocks = NG_DUDLEY_RAIN_MAPS + (map_index) * 0x80, .block_count = 16, .chip = (chip_index) }
+
+#define NG_IBUKI_LAYER0_MAPS 0x06434924
+#define NG_IBUKI_LAYER1_MAPS 0x064349E4
+#define NG_IBUKI_LAYER0_CHIP(map_index, chip_index)                                                                    \
+    { .blocks = NG_IBUKI_LAYER0_MAPS + (map_index) * 0x60, .block_count = 12, .chip = (chip_index) }
+#define NG_IBUKI_LAYER1_CHIP(map_index, chip_index)                                                                    \
+    { .blocks = NG_IBUKI_LAYER1_MAPS + (map_index) * 0x40, .block_count = 8, .chip = (chip_index) }
+#define NG_IBUKI_SWAY_CHIPS                                                                                            \
+    NG_IBUKI_LAYER0_CHIP(0, 33), NG_IBUKI_LAYER0_CHIP(0, 34), NG_IBUKI_LAYER0_CHIP(0, 41),                             \
+        NG_IBUKI_LAYER0_CHIP(0, 42), NG_IBUKI_LAYER0_CHIP(0, 49), NG_IBUKI_LAYER0_CHIP(0, 50),                         \
+        NG_IBUKI_LAYER0_CHIP(0, 57), NG_IBUKI_LAYER0_CHIP(0, 58), NG_IBUKI_LAYER0_CHIP(1, 1),                          \
+        NG_IBUKI_LAYER0_CHIP(1, 2), NG_IBUKI_LAYER0_CHIP(1, 9), NG_IBUKI_LAYER0_CHIP(1, 10),                           \
+        NG_IBUKI_LAYER0_CHIP(1, 17), NG_IBUKI_LAYER0_CHIP(1, 18), NG_IBUKI_LAYER0_CHIP(1, 33),                         \
+        NG_IBUKI_LAYER0_CHIP(1, 34), NG_IBUKI_LAYER0_CHIP(1, 41), NG_IBUKI_LAYER0_CHIP(1, 42),                         \
+        NG_IBUKI_LAYER0_CHIP(1, 49), NG_IBUKI_LAYER0_CHIP(1, 50), NG_IBUKI_LAYER1_CHIP(1, 32),                         \
+        NG_IBUKI_LAYER1_CHIP(1, 33), NG_IBUKI_LAYER1_CHIP(1, 34), NG_IBUKI_LAYER1_CHIP(1, 35),                         \
+        NG_IBUKI_LAYER1_CHIP(1, 40), NG_IBUKI_LAYER1_CHIP(1, 41), NG_IBUKI_LAYER1_CHIP(1, 42),                         \
+        NG_IBUKI_LAYER1_CHIP(1, 43), NG_IBUKI_LAYER1_CHIP(1, 48), NG_IBUKI_LAYER1_CHIP(1, 49),                         \
+        NG_IBUKI_LAYER1_CHIP(1, 50), NG_IBUKI_LAYER1_CHIP(1, 56), NG_IBUKI_LAYER1_CHIP(2, 32),                         \
+        NG_IBUKI_LAYER1_CHIP(2, 33), NG_IBUKI_LAYER1_CHIP(2, 34), NG_IBUKI_LAYER1_CHIP(2, 35),                         \
+        NG_IBUKI_LAYER1_CHIP(2, 40), NG_IBUKI_LAYER1_CHIP(2, 41), NG_IBUKI_LAYER1_CHIP(2, 42),                         \
+        NG_IBUKI_LAYER1_CHIP(2, 43), NG_IBUKI_LAYER1_CHIP(2, 48), NG_IBUKI_LAYER1_CHIP(2, 49),                         \
+        NG_IBUKI_LAYER1_CHIP(2, 50), NG_IBUKI_LAYER1_CHIP(2, 56), NG_IBUKI_LAYER1_CHIP(3, 32),                         \
+        NG_IBUKI_LAYER1_CHIP(3, 33), NG_IBUKI_LAYER1_CHIP(3, 34), NG_IBUKI_LAYER1_CHIP(3, 35),                         \
+        NG_IBUKI_LAYER1_CHIP(3, 40), NG_IBUKI_LAYER1_CHIP(3, 41), NG_IBUKI_LAYER1_CHIP(3, 42),                         \
+        NG_IBUKI_LAYER1_CHIP(3, 43), NG_IBUKI_LAYER1_CHIP(3, 48), NG_IBUKI_LAYER1_CHIP(3, 49),                         \
+        NG_IBUKI_LAYER1_CHIP(3, 50)
+
+/// Chips that NG's effect 14 recolours: variants 4-8 cycle layer 0 through 5 more palettes, variants 9 and 10 swap
+/// layer 1 between 2. Variant 10 covers chips that effect 48 also animates, so those get a chip for each of its maps.
+#define NG_IBUKI_PALETTE_CHIP(layer_index, chip_index, step_count, ...)                                                \
+    { .layer = (layer_index),                                                                                          \
+      .chip = (chip_index),                                                                                            \
+      .palette_steps = { __VA_ARGS__ },                                                                                \
+      .palette_step_count = (step_count) }
+#define NG_IBUKI_LAYER1_PALETTE_CHIP(map_index, chip_index)                                                            \
+    { .blocks = NG_IBUKI_LAYER1_MAPS + (map_index) * 0x40,                                                             \
+      .block_count = 8,                                                                                                \
+      .layer = 1,                                                                                                      \
+      .chip = (chip_index),                                                                                            \
+      .palette_steps = { { 10, 1 } },                                                                                  \
+      .palette_step_count = 1 }
+#define NG_IBUKI_PALETTE_CHIPS                                                                                         \
+    NG_IBUKI_PALETTE_CHIP(0, 45, 2, { 6, 1 }, { 7, 1 }), NG_IBUKI_PALETTE_CHIP(0, 46, 2, { 6, 1 }, { 8, 1 }),          \
+        NG_IBUKI_PALETTE_CHIP(0, 52, 2, { 4, 1 }, { 5, 1 }), NG_IBUKI_PALETTE_CHIP(0, 53, 1, { 6, 1 }),                \
+        NG_IBUKI_PALETTE_CHIP(0, 54, 1, { 6, 1 }), NG_IBUKI_PALETTE_CHIP(0, 60, 1, { 4, 1 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 61, 1, { 6, 1 }), NG_IBUKI_PALETTE_CHIP(0, 62, 1, { 6, 1 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 45, 2, { 6, 2 }, { 7, 2 }), NG_IBUKI_PALETTE_CHIP(0, 46, 2, { 6, 2 }, { 8, 2 }),      \
+        NG_IBUKI_PALETTE_CHIP(0, 52, 2, { 4, 2 }, { 5, 2 }), NG_IBUKI_PALETTE_CHIP(0, 53, 1, { 6, 2 }),                \
+        NG_IBUKI_PALETTE_CHIP(0, 54, 1, { 6, 2 }), NG_IBUKI_PALETTE_CHIP(0, 60, 1, { 4, 2 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 61, 1, { 6, 2 }), NG_IBUKI_PALETTE_CHIP(0, 62, 1, { 6, 2 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 45, 2, { 6, 3 }, { 7, 3 }), NG_IBUKI_PALETTE_CHIP(0, 46, 2, { 6, 3 }, { 8, 3 }),      \
+        NG_IBUKI_PALETTE_CHIP(0, 52, 2, { 4, 3 }, { 5, 3 }), NG_IBUKI_PALETTE_CHIP(0, 53, 1, { 6, 3 }),                \
+        NG_IBUKI_PALETTE_CHIP(0, 54, 1, { 6, 3 }), NG_IBUKI_PALETTE_CHIP(0, 60, 1, { 4, 3 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 61, 1, { 6, 3 }), NG_IBUKI_PALETTE_CHIP(0, 62, 1, { 6, 3 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 45, 2, { 6, 4 }, { 7, 4 }), NG_IBUKI_PALETTE_CHIP(0, 46, 2, { 6, 4 }, { 8, 4 }),      \
+        NG_IBUKI_PALETTE_CHIP(0, 52, 2, { 4, 4 }, { 5, 4 }), NG_IBUKI_PALETTE_CHIP(0, 53, 1, { 6, 4 }),                \
+        NG_IBUKI_PALETTE_CHIP(0, 54, 1, { 6, 4 }), NG_IBUKI_PALETTE_CHIP(0, 60, 1, { 4, 4 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 61, 1, { 6, 4 }), NG_IBUKI_PALETTE_CHIP(0, 62, 1, { 6, 4 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 45, 2, { 6, 5 }, { 7, 5 }), NG_IBUKI_PALETTE_CHIP(0, 46, 2, { 6, 5 }, { 8, 5 }),      \
+        NG_IBUKI_PALETTE_CHIP(0, 52, 2, { 4, 5 }, { 5, 5 }), NG_IBUKI_PALETTE_CHIP(0, 53, 1, { 6, 5 }),                \
+        NG_IBUKI_PALETTE_CHIP(0, 54, 1, { 6, 5 }), NG_IBUKI_PALETTE_CHIP(0, 60, 1, { 4, 5 }),                          \
+        NG_IBUKI_PALETTE_CHIP(0, 61, 1, { 6, 5 }), NG_IBUKI_PALETTE_CHIP(0, 62, 1, { 6, 5 }),                          \
+        NG_IBUKI_PALETTE_CHIP(1, 61, 1, { 9, 1 }), NG_IBUKI_PALETTE_CHIP(1, 62, 1, { 9, 1 }),                          \
+        NG_IBUKI_PALETTE_CHIP(1, 48, 1, { 10, 1 }), NG_IBUKI_PALETTE_CHIP(1, 49, 1, { 10, 1 }),                        \
+        NG_IBUKI_PALETTE_CHIP(1, 56, 1, { 10, 1 }), NG_IBUKI_PALETTE_CHIP(1, 57, 1, { 10, 1 }),                        \
+        NG_IBUKI_LAYER1_PALETTE_CHIP(1, 48), NG_IBUKI_LAYER1_PALETTE_CHIP(1, 49), NG_IBUKI_LAYER1_PALETTE_CHIP(1, 56), \
+        NG_IBUKI_LAYER1_PALETTE_CHIP(2, 48), NG_IBUKI_LAYER1_PALETTE_CHIP(2, 49), NG_IBUKI_LAYER1_PALETTE_CHIP(2, 56), \
+        NG_IBUKI_LAYER1_PALETTE_CHIP(3, 48), NG_IBUKI_LAYER1_PALETTE_CHIP(3, 49)
+#define NG_IBUKI_REWRITE_CHIPS { NG_IBUKI_SWAY_CHIPS, NG_IBUKI_PALETTE_CHIPS }
+#define NG_IBUKI_REWRITE_CHIP_COUNT 109
+
+/// Steps 1-11 of NG's effect 14 variant 0, which cycles the waterfall of layer 0 (chips 51, 52, 59, 60 and 61) through
+/// 12 palettes. The regular tilemap already shows step 0.
+#define NG_ELENA_WATERFALL_CHIP(chip_index, step)                                                                      \
+    { .layer = 0, .chip = (chip_index), .palette_steps = { { 0, (step) } }, .palette_step_count = 1 }
+#define NG_ELENA_WATERFALL_STEP(step)                                                                                  \
+    NG_ELENA_WATERFALL_CHIP(51, step), NG_ELENA_WATERFALL_CHIP(52, step), NG_ELENA_WATERFALL_CHIP(59, step),           \
+        NG_ELENA_WATERFALL_CHIP(60, step), NG_ELENA_WATERFALL_CHIP(61, step)
+
+/// Layer 1 without the bridge, which NG shows in the second area until the falling bridge lands. bg1501_init00 points
+/// the layer at a tilemap with blocks 11-13 in place of the lower row (blocks 6, 7 and 14).
+#define NG_ELENA_NO_BRIDGE_CHIP(chip_index, offset, block_index)                                                       \
+    { .layer = 1, .chip = (chip_index), .block_writes = { { (offset), (block_index) } }, .block_write_count = 1 }
+
+#define NG_ELENA_B_REWRITE_CHIPS                                                                                       \
+    { NG_ELENA_WATERFALL_STEP(1),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(2),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(3),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(4),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(5),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(6),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(7),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(8),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(9),                                                                                      \
+      NG_ELENA_WATERFALL_STEP(10),                                                                                     \
+      NG_ELENA_WATERFALL_STEP(11),                                                                                     \
+      NG_ELENA_NO_BRIDGE_CHIP(50, 0x3020, 11),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(51, 0x3060, 12),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(52, 0x3060, 12),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(53, 0x30A0, 13),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(57, 0x3020, 11),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(58, 0x3020, 11),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(59, 0x3060, 12),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(60, 0x3060, 12),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(61, 0x30A0, 13),                                                                         \
+      NG_ELENA_NO_BRIDGE_CHIP(62, 0x30A0, 13) }
+#define NG_ELENA_B_REWRITE_CHIP_COUNT 65
+
+/// Variants of NG's effect 14 (20 bytes each): {u8[3], u8 layer, u8[4], u32 palette sequence, u32 cell mask,
+/// u32 size}. The sequence holds {u8, u8 frames, u16 palette row} steps, the mask a byte per cell (1 if the cell
+/// changes) and the size {u8 width, u8 height} in cells.
+#define NG_EFFECT14_VARIANTS 0x06433400
+
+/// u16 tilemap offset of each variant's rectangle. The rectangles are in the lower half of the tilemap.
+#define NG_EFFECT14_OFFSETS 0x0643305C
+#define NG_EFFECT14_OFFSET_BASE 0x2000
+
+static const StageSource stage_sources[] = {
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 0,
+      .area = AREA_NG_GILL,
+      .palette_file = CACHE_FILE_NG_GILL_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_GILL_STAGE,
+      // The lava chips 49-53 of layer 0, in the order rw231-rw235 use them. Effect 12 shows the upper half of map 0,
+      // the lower half of map 0 (the regular tilemap), the upper half of map 1 and the lower half of map 1.
+      .rewrite_chips = { { .blocks = NG_GILL_LAVA_MAP_0, .block_count = 16, .chip = 17 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 17 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 49 },
+                         { .blocks = NG_GILL_LAVA_MAP_0, .block_count = 16, .chip = 18 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 18 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 50 },
+                         { .blocks = NG_GILL_LAVA_MAP_0, .block_count = 16, .chip = 19 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 19 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 51 },
+                         { .blocks = NG_GILL_LAVA_MAP_0, .block_count = 16, .chip = 20 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 20 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 52 },
+                         { .blocks = NG_GILL_LAVA_MAP_1, .block_count = 16, .chip = 21 } },
+      .rewrite_chip_count = 13 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 1,
+      .area = AREA_NG_ALEX,
+      .palette_file = CACHE_FILE_NG_ALEX_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_ALEX_STAGE,
+      .object_palettes = { 0x68 },
+      .object_palette_count = 1 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 3,
+      .area = AREA_NG_RYU_A,
+      .palette_file = CACHE_FILE_NG_RYU_A_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_RYU_A_STAGE,
+      .object_palettes = { 0x66 },
+      .object_palette_count = 1,
+      // Steps 1 and 2 of effect 14's variants 1 and 2 (chips 59 and 60 of layer 0) and variant 3 (chip 52 of layer 2),
+      // in the order rw261-rw263 use them. The regular tilemap already shows step 0.
+      .rewrite_chips = { { .layer = 0, .chip = 59, .palette_steps = { { 1, 1 } }, .palette_step_count = 1 },
+                         { .layer = 0, .chip = 59, .palette_steps = { { 1, 2 } }, .palette_step_count = 1 },
+                         { .layer = 0, .chip = 60, .palette_steps = { { 1, 1 }, { 2, 1 } }, .palette_step_count = 2 },
+                         { .layer = 0, .chip = 60, .palette_steps = { { 1, 2 }, { 2, 2 } }, .palette_step_count = 2 },
+                         { .layer = 2, .chip = 52, .palette_steps = { { 3, 1 } }, .palette_step_count = 1 },
+                         { .layer = 2, .chip = 52, .palette_steps = { { 3, 2 } }, .palette_step_count = 1 } },
+      .rewrite_chip_count = 6 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 4,
+      .area = AREA_NG_RYU_B,
+      .palette_file = CACHE_FILE_NG_RYU_B_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_RYU_B_STAGE,
+      .object_palettes = { 0x67 },
+      .object_palette_count = 1,
+      // The chips of layer 1 that bg0401_rewrite fills with content (bg_outer_chip_tbl's 0x124-0x127). Past 0x90 it
+      // writes blocks 5 and 11 over the left edge of layer 1, and past -0x90 blocks 0 and 6 over its right edge. Blocks
+      // 0 and 5 and the other chips of blocks 6 and 11 are empty.
+      .rewrite_chips = { { .layer = 1, .chip = 56, .block_writes = { { 0x3000, 11 } }, .block_write_count = 1 },
+                         { .layer = 1, .chip = 57, .block_writes = { { 0x3000, 11 } }, .block_write_count = 1 },
+                         { .layer = 1, .chip = 62, .block_writes = { { 0x30C0, 6 } }, .block_write_count = 1 },
+                         { .layer = 1, .chip = 63, .block_writes = { { 0x30C0, 6 } }, .block_write_count = 1 } },
+      .rewrite_chip_count = 4 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 5,
+      .area = AREA_NG_YUN_A,
+      .palette_file = CACHE_FILE_NG_YUN_A_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_YUN_A_STAGE,
+      .object_palettes = { 0x6A },
+      .object_palette_count = 1 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 6,
+      .area = AREA_NG_YUN_B,
+      .palette_file = CACHE_FILE_NG_YUN_B_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_YUN_B_STAGE,
+      .object_palettes = { 0x6B },
+      .object_palette_count = 1 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 7,
+      .area = AREA_NG_DUDLEY_A,
+      .palette_file = CACHE_FILE_NG_DUDLEY_A_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_DUDLEY_A_STAGE,
+      .object_palettes = { 0x64 },
+      .object_palette_count = 1,
+      // bg0701_rewrite fills the left edge of layer 1 with the right half of block 1 and its right edge with the left
+      // half of block 78
+      .layer_writes = { { .layer = 1, .offset = 0x3000, .block = 1, .first_column = 8, .columns = 8 },
+                        { .layer = 1, .offset = 0x30E0, .block = 78, .first_column = 0, .columns = 8 } },
+      .layer_write_count = 2,
+      .rewrite_chips = { NG_DUDLEY_RAIN_CHIP(0, 0),  NG_DUDLEY_RAIN_CHIP(0, 1),  NG_DUDLEY_RAIN_CHIP(0, 7),
+                         NG_DUDLEY_RAIN_CHIP(0, 8),  NG_DUDLEY_RAIN_CHIP(0, 9),  NG_DUDLEY_RAIN_CHIP(0, 10),
+                         NG_DUDLEY_RAIN_CHIP(0, 11), NG_DUDLEY_RAIN_CHIP(0, 15), NG_DUDLEY_RAIN_CHIP(0, 16),
+                         NG_DUDLEY_RAIN_CHIP(0, 17), NG_DUDLEY_RAIN_CHIP(0, 18), NG_DUDLEY_RAIN_CHIP(0, 19),
+                         NG_DUDLEY_RAIN_CHIP(0, 21), NG_DUDLEY_RAIN_CHIP(0, 22), NG_DUDLEY_RAIN_CHIP(0, 23),
+                         NG_DUDLEY_RAIN_CHIP(0, 24), NG_DUDLEY_RAIN_CHIP(0, 25), NG_DUDLEY_RAIN_CHIP(0, 31),
+                         NG_DUDLEY_RAIN_CHIP(0, 32), NG_DUDLEY_RAIN_CHIP(0, 33), NG_DUDLEY_RAIN_CHIP(0, 34),
+                         NG_DUDLEY_RAIN_CHIP(0, 39), NG_DUDLEY_RAIN_CHIP(0, 40), NG_DUDLEY_RAIN_CHIP(0, 41),
+                         NG_DUDLEY_RAIN_CHIP(0, 42), NG_DUDLEY_RAIN_CHIP(0, 43), NG_DUDLEY_RAIN_CHIP(0, 47),
+                         NG_DUDLEY_RAIN_CHIP(0, 48), NG_DUDLEY_RAIN_CHIP(0, 49), NG_DUDLEY_RAIN_CHIP(0, 50),
+                         NG_DUDLEY_RAIN_CHIP(0, 51), NG_DUDLEY_RAIN_CHIP(0, 53), NG_DUDLEY_RAIN_CHIP(0, 54),
+                         NG_DUDLEY_RAIN_CHIP(0, 55), NG_DUDLEY_RAIN_CHIP(0, 56), NG_DUDLEY_RAIN_CHIP(0, 57),
+                         NG_DUDLEY_RAIN_CHIP(0, 63), NG_DUDLEY_RAIN_CHIP(1, 0),  NG_DUDLEY_RAIN_CHIP(1, 1),
+                         NG_DUDLEY_RAIN_CHIP(1, 7),  NG_DUDLEY_RAIN_CHIP(1, 8),  NG_DUDLEY_RAIN_CHIP(1, 9),
+                         NG_DUDLEY_RAIN_CHIP(1, 10), NG_DUDLEY_RAIN_CHIP(1, 11), NG_DUDLEY_RAIN_CHIP(1, 15),
+                         NG_DUDLEY_RAIN_CHIP(1, 16), NG_DUDLEY_RAIN_CHIP(1, 17), NG_DUDLEY_RAIN_CHIP(1, 18),
+                         NG_DUDLEY_RAIN_CHIP(1, 19), NG_DUDLEY_RAIN_CHIP(1, 21), NG_DUDLEY_RAIN_CHIP(1, 22),
+                         NG_DUDLEY_RAIN_CHIP(1, 23), NG_DUDLEY_RAIN_CHIP(1, 24), NG_DUDLEY_RAIN_CHIP(1, 25),
+                         NG_DUDLEY_RAIN_CHIP(1, 31), NG_DUDLEY_RAIN_CHIP(1, 32), NG_DUDLEY_RAIN_CHIP(1, 33),
+                         NG_DUDLEY_RAIN_CHIP(1, 34), NG_DUDLEY_RAIN_CHIP(1, 39), NG_DUDLEY_RAIN_CHIP(1, 40),
+                         NG_DUDLEY_RAIN_CHIP(1, 41), NG_DUDLEY_RAIN_CHIP(1, 42), NG_DUDLEY_RAIN_CHIP(1, 43),
+                         NG_DUDLEY_RAIN_CHIP(1, 47), NG_DUDLEY_RAIN_CHIP(1, 48), NG_DUDLEY_RAIN_CHIP(1, 49),
+                         NG_DUDLEY_RAIN_CHIP(1, 50), NG_DUDLEY_RAIN_CHIP(1, 51), NG_DUDLEY_RAIN_CHIP(1, 53),
+                         NG_DUDLEY_RAIN_CHIP(1, 54), NG_DUDLEY_RAIN_CHIP(1, 55), NG_DUDLEY_RAIN_CHIP(1, 56),
+                         NG_DUDLEY_RAIN_CHIP(1, 57), NG_DUDLEY_RAIN_CHIP(1, 63), NG_DUDLEY_RAIN_CHIP(2, 32),
+                         NG_DUDLEY_RAIN_CHIP(2, 33), NG_DUDLEY_RAIN_CHIP(2, 39), NG_DUDLEY_RAIN_CHIP(2, 40),
+                         NG_DUDLEY_RAIN_CHIP(2, 41), NG_DUDLEY_RAIN_CHIP(2, 42), NG_DUDLEY_RAIN_CHIP(2, 43),
+                         NG_DUDLEY_RAIN_CHIP(2, 47), NG_DUDLEY_RAIN_CHIP(2, 48), NG_DUDLEY_RAIN_CHIP(2, 49),
+                         NG_DUDLEY_RAIN_CHIP(2, 50), NG_DUDLEY_RAIN_CHIP(2, 51), NG_DUDLEY_RAIN_CHIP(2, 55),
+                         NG_DUDLEY_RAIN_CHIP(2, 56), NG_DUDLEY_RAIN_CHIP(2, 57), NG_DUDLEY_RAIN_CHIP(2, 63),
+                         NG_DUDLEY_RAIN_CHIP(3, 0),  NG_DUDLEY_RAIN_CHIP(3, 1),  NG_DUDLEY_RAIN_CHIP(3, 7),
+                         NG_DUDLEY_RAIN_CHIP(3, 8),  NG_DUDLEY_RAIN_CHIP(3, 9),  NG_DUDLEY_RAIN_CHIP(3, 10),
+                         NG_DUDLEY_RAIN_CHIP(3, 11), NG_DUDLEY_RAIN_CHIP(3, 12), NG_DUDLEY_RAIN_CHIP(3, 15),
+                         NG_DUDLEY_RAIN_CHIP(3, 16), NG_DUDLEY_RAIN_CHIP(3, 17), NG_DUDLEY_RAIN_CHIP(3, 18),
+                         NG_DUDLEY_RAIN_CHIP(3, 19), NG_DUDLEY_RAIN_CHIP(3, 20), NG_DUDLEY_RAIN_CHIP(3, 23),
+                         NG_DUDLEY_RAIN_CHIP(3, 24), NG_DUDLEY_RAIN_CHIP(3, 25), NG_DUDLEY_RAIN_CHIP(3, 27),
+                         NG_DUDLEY_RAIN_CHIP(3, 31), NG_DUDLEY_RAIN_CHIP(3, 32), NG_DUDLEY_RAIN_CHIP(3, 33),
+                         NG_DUDLEY_RAIN_CHIP(3, 39), NG_DUDLEY_RAIN_CHIP(3, 40), NG_DUDLEY_RAIN_CHIP(3, 41),
+                         NG_DUDLEY_RAIN_CHIP(3, 42), NG_DUDLEY_RAIN_CHIP(3, 43), NG_DUDLEY_RAIN_CHIP(3, 47),
+                         NG_DUDLEY_RAIN_CHIP(3, 48), NG_DUDLEY_RAIN_CHIP(3, 49), NG_DUDLEY_RAIN_CHIP(3, 50),
+                         NG_DUDLEY_RAIN_CHIP(3, 51), NG_DUDLEY_RAIN_CHIP(3, 55), NG_DUDLEY_RAIN_CHIP(3, 56),
+                         NG_DUDLEY_RAIN_CHIP(3, 57), NG_DUDLEY_RAIN_CHIP(3, 58), NG_DUDLEY_RAIN_CHIP(3, 63) },
+      .rewrite_chip_count = 126 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 8,
+      .area = AREA_NG_DUDLEY_B,
+      .palette_file = CACHE_FILE_NG_DUDLEY_B_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_DUDLEY_B_STAGE,
+      .object_palettes = { 0x65 },
+      .object_palette_count = 1,
+      .layer_writes = { { .layer = 1, .offset = 0x3000, .block = 1, .first_column = 8, .columns = 8 },
+                        { .layer = 1, .offset = 0x30E0, .block = 5, .first_column = 0, .columns = 8 } },
+      .layer_write_count = 2 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 9,
+      .area = AREA_NG_NECRO,
+      .palette_file = CACHE_FILE_NG_NECRO_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_NECRO_STAGE,
+      .object_palettes = { 0x61 },
+      .object_palette_count = 1 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 11,
+      .area = AREA_NG_IBUKI_A,
+      .palette_file = CACHE_FILE_NG_IBUKI_A_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_IBUKI_A_STAGE,
+      .object_palettes = { 0x6D },
+      .object_palette_count = 1,
+      .rewrite_chips = NG_IBUKI_REWRITE_CHIPS,
+      .rewrite_chip_count = NG_IBUKI_REWRITE_CHIP_COUNT },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 12,
+      .area = AREA_NG_IBUKI_B,
+      .palette_file = CACHE_FILE_NG_IBUKI_B_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_IBUKI_B_STAGE,
+      .object_palettes = { 0x6E },
+      .object_palette_count = 1,
+      .rewrite_chips = NG_IBUKI_REWRITE_CHIPS,
+      .rewrite_chip_count = NG_IBUKI_REWRITE_CHIP_COUNT },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 13,
+      .area = AREA_NG_IBUKI_C,
+      .palette_file = CACHE_FILE_NG_IBUKI_C_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_IBUKI_C_STAGE,
+      .object_palettes = { 0x6F },
+      .object_palette_count = 1,
+      .rewrite_chips = NG_IBUKI_REWRITE_CHIPS,
+      .rewrite_chip_count = NG_IBUKI_REWRITE_CHIP_COUNT },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 14,
+      .area = AREA_NG_ELENA_A,
+      .palette_file = CACHE_FILE_NG_ELENA_A_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_ELENA_A_STAGE,
+      .object_palettes = { 0x62 },
+      .object_palette_count = 1 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 15,
+      .area = AREA_NG_ELENA_B,
+      .palette_file = CACHE_FILE_NG_ELENA_B_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_ELENA_B_STAGE,
+      .object_palettes = { 0x63 },
+      .object_palette_count = 1,
+      .rewrite_chips = NG_ELENA_B_REWRITE_CHIPS,
+      .rewrite_chip_count = NG_ELENA_B_REWRITE_CHIP_COUNT },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 16,
+      .area = AREA_NG_ORO,
+      .palette_file = CACHE_FILE_NG_ORO_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_ORO_STAGE,
+      .object_palettes = { 0x6C },
+      .object_palette_count = 1 },
+    { .game = ROM_GAME_SFIII,
+      .bg_index = 2,
+      .area = AREA_NG_SEAN,
+      .palette_file = CACHE_FILE_NG_SEAN_BG_PALETTE,
+      .ppg_file = CACHE_FILE_NG_SEAN_STAGE,
+      .object_palettes = { 0x69 },
+      .object_palette_count = 1 },
+};
+
+#define MAX_CG_RANGES 4
+
+typedef struct CgRange {
+    Uint16 first;
+    int count;
+} CgRange;
+
+/// A texture group built from arcade CGs. The ranges fill the group's slots in order.
+typedef struct CgGroupSource {
+    RomGame game;
+    int group;
+    CgRange ranges[MAX_CG_RANGES];
+    int range_count;
+    ArcadeCgFlags flags;
+    CacheFile file;
+} CgGroupSource;
+
+static const CgGroupSource cg_group_sources[] = {
+    // Objects of NG Alex's stage
+    { .game = ROM_GAME_SFIII,
+      .group = 100,
+      .ranges = { { 0x5620, 320 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_ALEX_OBJECTS },
+
+    // Ibuki's tanuki (effect 94). Its char table is _ng_eff94_char_table. The tanuki itself uses part palette 5, while
+    // the notes and the figures use Ibuki's palette.
+    { .game = ROM_GAME_SFIII,
+      .group = 101,
+      .ranges = { { 0x235B, 160 }, { 0x7245, 15 }, { 0x7263, 3 }, { 0x732C, 6 } },
+      .range_count = 4,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_EF94 },
+
+    // Objects of NG Gill's stage. Its char table is _ng_fnl_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 102,
+      .ranges = { { 0x6000, 156 }, { 0x6390, 82 } },
+      .range_count = 2,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_GILL_OBJECTS },
+
+    // Objects of the first area of NG Ryu's stage. Its char table is _ng_j10_a_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 103,
+      .ranges = { { 0x41C6, 432 }, { 0x7718, 32 } },
+      .range_count = 2,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_RYU_A_OBJECTS },
+
+    // Objects of the second area of NG Ryu's stage. Its char table is _ng_j10_b_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 104,
+      .ranges = { { 0x43A0, 316 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_RYU_B_OBJECTS },
+
+    // Objects of the first area of NG Yun's stage. Its char table is _ng_hkg_a_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 105,
+      .ranges = { { 0x4540, 462 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_YUN_A_OBJECTS },
+
+    // Yun and Yang watching from NG Yun's stage (effect C1). Its char table is _ng_effc1_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 106,
+      .ranges = { { 0x2B8D, 7 }, { 0xF8F, 22 } },
+      .range_count = 2,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_EFC1 },
+
+    // Objects of the second area of NG Yun's stage. Its char table is _ng_hkg_b_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 107,
+      .ranges = { { 0x47C0, 944 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_YUN_B_OBJECTS },
+
+    // Objects of NG Dudley's stage. Its char table is _ng_eng_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 108,
+      .ranges = { { 0x52D0, 176 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_DUDLEY_OBJECTS },
+
+    // Objects of NG Necro's stage. Its char table is _ng_rca_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 109,
+      .ranges = { { 0x4C08, 440 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_NECRO_OBJECTS },
+
+    // Objects of NG Ibuki's stage. The stage's char table is _ng_j11_char_table. 0x6240 is for NG effect 77, whose char
+    // table follows the stage's in the ROM.
+    { .game = ROM_GAME_SFIII,
+      .group = 110,
+      .ranges = { { 0x6240, 280 }, { 0x6510, 93 }, { 0x7738, 14 } },
+      .range_count = 3,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_IBUKI_OBJECTS },
+
+    // Objects of NG Elena's stage, first area. Its char table is _ng_afc_a_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 111,
+      .ranges = { { 0x4F60, 263 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_ELENA_A_OBJECTS },
+
+    // Objects of NG Elena's stage, second and third areas. Its char table is _ng_afc_b_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 112,
+      .ranges = { { 0x50B0, 489 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_ELENA_B_OBJECTS },
+
+    // Objects of NG Oro's stage. Its char table is _ng_bra_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 113,
+      .ranges = { { 0x53C0, 441 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_ORO_OBJECTS },
+
+    // Objects of NG Sean's stage. Its char table is _ng_nyc_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 114,
+      .ranges = { { 0x5D30, 699 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS,
+      .file = CACHE_FILE_NG_SEAN_OBJECTS },
+
+    // Buildings of NG Sean's stage (effect 44). Its char table is _ng_eff44_char_table.
+    { .game = ROM_GAME_SFIII,
+      .group = 115,
+      .ranges = { { 0x5872, 102 } },
+      .range_count = 1,
+      .flags = ARCADE_CG_PART_PALETTES | ARCADE_CG_COMPRESS | ARCADE_CG_8BPP,
+      .file = CACHE_FILE_NG_EF44 },
+};
+
+/// CPS3 graphics addresses start this far before the graphics region
+#define GRAPHICS_ADDRESS_BASE 0x400000
+
+#define RAM_BASE 0x02000000
+#define RAM_SIZE 0x100000
+#define TILEMAP_SIZE 64
+#define TILE_BYTES 256
+#define PPG_CHIP_SIZE 128
+#define PPG_CHIP_BLOCKS 8
+#define PPG_FIRST_CHIP 32
+#define PPG_LAYER_CHIPS 32
+#define PPG_LAYERS 3
+
+/// The parts of a ROM set that the stage conversion reads
+typedef struct StageRom {
+    RomRegion program; // Starts at ROM_PROGRAM_BASE
+    RomRegion graphics;
+    const StageTables* tables;
+} StageRom;
+
+static bool rom_processed[ROM_GAME_COUNT] = { false };
+
+/// Converts a CPS3 xRGB555 color to the PS2 file format: xBGR555 with bit 15 set on everything
+/// except the transparent color that starts each 64-color row.
+/// @param transparent_pen Whether the first color of each row is always transparent
+static Uint16 convert_color(Uint16 color, size_t index, bool transparent_pen) {
+    color &= 0x7FFF;
+    const Uint16 swapped = ((color & 0x1F) << 10) | (color & 0x3E0) | (color >> 10);
+
+    if (index % 64 == 0 && (swapped == 0 || transparent_pen)) {
+        return 0;
+    }
+
+    return swapped | 0x8000;
+}
+
+static bool write_palette(const PaletteSource* source, RomRegion graphics) {
+    const size_t count = source->rows * 64;
+    const size_t end = source->offset + ((source->rows - 1) * source->row_stride + 64) * 2;
+
+    if (graphics.data == NULL || end > graphics.size) {
+        SDL_Log("Couldn't build %s: ROM has no data for it", Cache_GetPath(source->file));
+        return false;
+    }
+
+    Uint16* palette = SDL_malloc(count * sizeof(Uint16));
+
+    if (palette == NULL) {
+        return false;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        const Uint8* src = graphics.data + source->offset + ((i / 64) * source->row_stride + i % 64) * 2;
+        palette[i] = SDL_Swap16LE(convert_color(src[0] | (src[1] << 8), i, source->transparent_pen));
+    }
+
+    const bool success = Cache_Write(source->file, palette, count * sizeof(Uint16));
+    SDL_free(palette);
+    return success;
+}
+
+// MARK: - Stage conversion
+
+static bool program_read(const StageRom* rom, Uint32 address, size_t size, const Uint8** result) {
+    if (address >= RAM_BASE && address < RAM_BASE + RAM_SIZE) {
+        address = address - RAM_BASE + rom->tables->ram_image;
+    }
+
+    if (address < ROM_PROGRAM_BASE || address - ROM_PROGRAM_BASE + size > rom->program.size) {
+        return false;
+    }
+
+    *result = rom->program.data + (address - ROM_PROGRAM_BASE);
+    return true;
+}
+
+static bool program_u16(const StageRom* rom, Uint32 address, Uint16* value) {
+    const Uint8* p;
+
+    if (!program_read(rom, address, 2, &p)) {
+        return false;
+    }
+
+    *value = ((Uint16)p[0] << 8) | p[1];
+    return true;
+}
+
+static bool program_u32(const StageRom* rom, Uint32 address, Uint32* value) {
+    const Uint8* p;
+
+    if (!program_read(rom, address, 4, &p)) {
+        return false;
+    }
+
+    *value = ((Uint32)p[0] << 24) | ((Uint32)p[1] << 16) | ((Uint32)p[2] << 8) | p[3];
+    return true;
+}
+
+static bool graphics_offset(const StageRom* rom, Uint32 address, size_t* offset) {
+    if (address < GRAPHICS_ADDRESS_BASE || address - GRAPHICS_ADDRESS_BASE >= rom->graphics.size) {
+        return false;
+    }
+
+    *offset = address - GRAPHICS_ADDRESS_BASE;
+    return true;
+}
+
+/// Decompresses the stage's 16x16 tiles.
+static Uint8* load_tiles(const StageRom* rom, int bg_index, size_t* tiles_size) {
+    const Uint32 record = rom->tables->bg_cg_tbl + bg_index * 0x10;
+    Uint32 dictionary_word;
+    Uint32 size;
+    Uint32 source_word;
+    Uint32 mode;
+    size_t dictionary;
+    size_t source;
+
+    if (!program_u32(rom, record, &dictionary_word) || !program_u32(rom, record + 4, &size) ||
+        !program_u32(rom, record + 8, &source_word) || !program_u32(rom, record + 12, &mode) ||
+        !graphics_offset(rom, dictionary_word * 2, &dictionary) || !graphics_offset(rom, source_word * 2, &source)) {
+        return NULL;
+    }
+
+    *tiles_size = ((size_t)size + 1) * 16;
+    Uint8* tiles = SDL_malloc(*tiles_size);
+
+    // Mode 2 holds 8bpp tiles
+    if (tiles == NULL || !(mode == 2 ? Cps3_DecodeDma8(rom->graphics, source, dictionary, tiles, *tiles_size)
+                                     : Cps3_DecodeDma(rom->graphics, source, dictionary, tiles, *tiles_size))) {
+        SDL_free(tiles);
+        return NULL;
+    }
+
+    return tiles;
+}
+
+/// Converts a palette that `palette_load` loads.
+/// @param palette Receives the colors after the `*count` already in it.
+/// @param first_row Receives the CPS3 palette row that the palette is loaded at.
+/// @param for_8bpp Whether 8bpp graphics use the palette.
+static bool load_palette(
+    const StageRom* rom, Uint16 palette_id, Uint16* palette, size_t capacity, size_t* count, int* first_row,
+    bool for_8bpp
+) {
+    const Uint32 record = rom->tables->palette_load_tbl + (palette_id & 0xFF) * 12;
+    Uint32 source_address;
+    Uint32 destination;
+    Uint32 size;
+    size_t source;
+
+    if (!program_u32(rom, record, &source_address) || !program_u32(rom, record + 4, &destination) ||
+        !program_u32(rom, record + 8, &size) || !graphics_offset(rom, source_address, &source) ||
+        source + size > rom->graphics.size || *count + size / 2 > capacity) {
+        return false;
+    }
+
+    *first_row = destination / 2 / 64;
+
+    for (size_t i = 0; i < size / 2; i++) {
+        const Uint8* src = rom->graphics.data + source + i * 2;
+        const Uint16 color = src[0] | (src[1] << 8);
+        const Uint16 converted =
+            for_8bpp && i % 64 == 0 ? convert_color(color, 1, false) & 0x7FFF : convert_color(color, i, true);
+        palette[*count + i] = SDL_Swap16LE(converted);
+    }
+
+    *count += size / 2;
+    return true;
+}
+
+#define MAX_STAGE_PALETTE_COLORS (128 * 64)
+
+/// Converts the stage palette that `bg_initialize` loads, followed by the stage's object palettes.
+/// @param first_row Receives the CPS3 palette row that the stage palette is loaded at.
+/// @param for_8bpp Whether the stage has 8bpp tiles
+static Uint16* load_stage_palette(
+    const StageRom* rom, const StageSource* source, size_t* count, int* first_row, bool for_8bpp
+) {
+    Uint16* palette = SDL_malloc(MAX_STAGE_PALETTE_COLORS * sizeof(Uint16));
+    Uint16 palette_id;
+    bool success = palette != NULL && program_u16(rom, rom->tables->bg_pal_tbl + source->bg_index * 2, &palette_id);
+    *count = 0;
+    success = success && load_palette(rom, palette_id, palette, MAX_STAGE_PALETTE_COLORS, count, first_row, for_8bpp);
+
+    for (int i = 0; i < source->object_palette_count && success; i++) {
+        int row;
+        const int expected_row = *first_row + (int)(*count / 64);
+
+        // Object palettes must continue the stage palette, since the PS2 format loads one block
+        success =
+            load_palette(rom, source->object_palettes[i], palette, MAX_STAGE_PALETTE_COLORS, count, &row, for_8bpp) &&
+            row == expected_row;
+    }
+
+    if (!success) {
+        SDL_free(palette);
+        return NULL;
+    }
+
+    return palette;
+}
+
+/// Copies columns of a 16x16 map block of the stage into the tilemap at a byte offset
+static bool write_block_columns(
+    const StageRom* rom, int bg_index, Uint32 offset, Uint32 block, int first_column, int columns, Uint32* tilemap
+) {
+    const int top = offset / 0x100;
+    const int left = (offset % 0x100) / 4;
+    Uint32 map_base;
+
+    if (top + 16 > TILEMAP_SIZE || left + columns > TILEMAP_SIZE || first_column + columns > 16 ||
+        !program_u32(rom, rom->tables->bg_map_base + bg_index * 4, &map_base)) {
+        return false;
+    }
+
+    for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < columns; x++) {
+            if (!program_u32(
+                    rom,
+                    map_base + block * 0x400 + (y * 16 + first_column + x) * 4,
+                    &tilemap[(top + y) * TILEMAP_SIZE + left + x]
+                )) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+/// Copies a 16x16 map block of the stage into the tilemap at a byte offset
+static bool write_block(const StageRom* rom, int bg_index, Uint32 offset, Uint32 block, Uint32* tilemap) {
+    return write_block_columns(rom, bg_index, offset, block, 0, 16, tilemap);
+}
+
+/// Builds a 64x64 tilemap from a {u32 tilemap offset, u32 block index} list. Each entry holds the tile number in the
+/// upper half and the attributes in the lower half. Entries that no map block covers are 0xFFFFFFFF.
+static bool build_tilemap_from_blocks(const StageRom* rom, int bg_index, Uint32 blocks, int count, Uint32* tilemap) {
+    SDL_memset(tilemap, 0xFF, TILEMAP_SIZE * TILEMAP_SIZE * sizeof(Uint32));
+
+    for (int i = 0; i < count; i++) {
+        Uint32 offset;
+        Uint32 block;
+
+        if (!program_u32(rom, blocks + i * 8, &offset) || !program_u32(rom, blocks + i * 8 + 4, &block) ||
+            !write_block(rom, bg_index, offset, block, tilemap)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/// Builds a layer's 64x64 tilemap from the stage's map block list.
+static bool build_tilemap(const StageRom* rom, int bg_index, int layer, Uint32* tilemap) {
+    Uint16 count;
+    Uint32 blocks;
+
+    return program_u16(rom, rom->tables->bg_block_count + bg_index * 8 + layer * 2, &count) &&
+           program_u32(rom, rom->tables->bg_block_list + bg_index * 0x10 + layer * 4, &blocks) &&
+           build_tilemap_from_blocks(rom, bg_index, blocks, count, tilemap);
+}
+
+/// Sets the palettes that a step of NG's effect 14 gives to its cells.
+/// @param palette_base Palette code that map entries are relative to
+static bool apply_palette_step(
+    const StageRom* rom, const PaletteStep* step, int layer, int palette_base, Uint32* tilemap
+) {
+    const Uint32 variant = NG_EFFECT14_VARIANTS + step->variant * 20;
+    const Uint8* header;
+    const Uint8* size;
+    const Uint8* mask;
+    Uint32 sequence;
+    Uint32 mask_address;
+    Uint32 size_address;
+    Uint16 offset;
+    Uint16 palette;
+
+    if (!program_read(rom, variant, 8, &header) || header[3] != layer || !program_u32(rom, variant + 8, &sequence) ||
+        !program_u32(rom, variant + 12, &mask_address) || !program_u32(rom, variant + 16, &size_address) ||
+        !program_read(rom, size_address, 2, &size) || !program_read(rom, mask_address, size[0] * size[1], &mask) ||
+        !program_u16(rom, NG_EFFECT14_OFFSETS + step->variant * 2, &offset) ||
+        !program_u16(rom, sequence + step->step * 4 + 2, &palette)) {
+        return false;
+    }
+
+    const int top = (NG_EFFECT14_OFFSET_BASE + offset) / 0x100;
+    const int left = (offset % 0x100) / 4;
+
+    if (top + size[1] > TILEMAP_SIZE || left + size[0] > TILEMAP_SIZE) {
+        return false;
+    }
+
+    for (int y = 0; y < size[1]; y++) {
+        for (int x = 0; x < size[0]; x++) {
+            Uint32* entry = &tilemap[(top + y) * TILEMAP_SIZE + left + x];
+
+            if (mask[y * size[0] + x] == 1 && *entry != 0xFFFFFFFF) {
+                // The effect writes absolute palette codes, while map entries are relative to palette_base
+                *entry = (*entry & 0xFFFFFE00) | ((palette - palette_base) & 0x1FF);
+            }
+        }
+    }
+
+    return true;
+}
+
+/// Draws a 128x128 chip from the tilemap.
+/// @param block_palettes Receives the palette row of each 16x16 block, or -1 if the block is empty.
+static bool draw_chip(
+    const Uint32* tilemap, const Uint8* tiles, size_t tiles_size, int chip, int palette_base, int palette_rows,
+    Uint8* pixels, int* block_palettes
+) {
+    const int chip_x = (chip % PPG_CHIP_BLOCKS) * PPG_CHIP_BLOCKS;
+    const int chip_y = (chip / PPG_CHIP_BLOCKS) * PPG_CHIP_BLOCKS;
+
+    SDL_memset(pixels, 0, PPG_CHIP_SIZE * PPG_CHIP_SIZE);
+
+    for (int by = 0; by < PPG_CHIP_BLOCKS; by++) {
+        for (int bx = 0; bx < PPG_CHIP_BLOCKS; bx++) {
+            const Uint32 entry = tilemap[(chip_y + by) * TILEMAP_SIZE + chip_x + bx];
+            int* block_palette = &block_palettes[by * PPG_CHIP_BLOCKS + bx];
+            *block_palette = -1;
+
+            if (entry == 0xFFFFFFFF) {
+                continue;
+            }
+
+            const size_t tile = (entry >> 16) >> 1;
+            const Uint16 attributes = (Uint16)(entry + palette_base);
+            const bool is_6bpp = attributes & 0x200;
+            const bool flip_y = attributes & 0x800;
+            const bool flip_x = attributes & 0x1000;
+            bool empty = true;
+
+            // An 8bpp tile's palette code counts 256-color palettes. It reads 4 rows starting at its row, which the
+            // engine's palettes allow.
+            const int palette = ((attributes & 0x1FF) - (palette_base & 0x1FF)) * (is_6bpp ? 1 : 4);
+
+            if ((tile + 1) * TILE_BYTES > tiles_size) {
+                return false;
+            }
+
+            for (int y = 0; y < 16; y++) {
+                for (int x = 0; x < 16; x++) {
+                    const int source_x = flip_x ? 15 - x : x;
+                    const int source_y = flip_y ? 15 - y : y;
+                    const Uint8 pixel = tiles[tile * TILE_BYTES + source_y * 16 + source_x] & (is_6bpp ? 0x3F : 0xFF);
+                    pixels[(by * 16 + y) * PPG_CHIP_SIZE + bx * 16 + x] = pixel;
+                    empty = empty && pixel == 0;
+                }
+            }
+
+            if (empty) {
+                continue;
+            }
+
+            if (palette < 0 || palette + (is_6bpp ? 1 : 4) > palette_rows) {
+                SDL_LogDebug(
+                    SDL_LOG_CATEGORY_APPLICATION,
+                    "Dropping tile %zu of chip %d: palette %d is outside the stage palette",
+                    tile,
+                    chip,
+                    palette
+                );
+
+                for (int y = 0; y < 16; y++) {
+                    SDL_memset(&pixels[(by * 16 + y) * PPG_CHIP_SIZE + bx * 16], 0, 16);
+                }
+
+                continue;
+            }
+
+            *block_palette = palette;
+        }
+    }
+
+    return true;
+}
+
+/// Appends a pTEX chunk. Its trans entries are rectangles of 16x16 blocks that share a palette.
+static bool append_chip(ByteBuffer* ppg, const Uint8* pixels, const int* block_palettes) {
+    Uint8 trans[PPG_CHIP_BLOCKS * PPG_CHIP_BLOCKS * 3];
+    bool covered[PPG_CHIP_BLOCKS * PPG_CHIP_BLOCKS] = { false };
+    int trans_count = 0;
+
+    for (int by = 0; by < PPG_CHIP_BLOCKS; by++) {
+        for (int bx = 0; bx < PPG_CHIP_BLOCKS; bx++) {
+            const int palette = block_palettes[by * PPG_CHIP_BLOCKS + bx];
+
+            if (palette < 0 || covered[by * PPG_CHIP_BLOCKS + bx]) {
+                continue;
+            }
+
+            int width = 1;
+            int height = 1;
+
+            while (bx + width < PPG_CHIP_BLOCKS && !covered[by * PPG_CHIP_BLOCKS + bx + width] &&
+                   block_palettes[by * PPG_CHIP_BLOCKS + bx + width] == palette) {
+                width++;
+            }
+
+            for (bool grow = true; grow && by + height < PPG_CHIP_BLOCKS;) {
+                for (int x = bx; x < bx + width && grow; x++) {
+                    grow = !covered[(by + height) * PPG_CHIP_BLOCKS + x] &&
+                           block_palettes[(by + height) * PPG_CHIP_BLOCKS + x] == palette;
+                }
+
+                height += grow;
+            }
+
+            for (int y = by; y < by + height; y++) {
+                for (int x = bx; x < bx + width; x++) {
+                    covered[y * PPG_CHIP_BLOCKS + x] = true;
+                }
+            }
+
+            trans[trans_count * 3] = palette;
+            trans[trans_count * 3 + 1] = by * PPG_CHIP_BLOCKS + bx;
+            trans[trans_count * 3 + 2] = ((width - 1) << 4) | (height - 1);
+            trans_count++;
+        }
+    }
+
+    uLongf compressed_size = compressBound(PPG_CHIP_SIZE * PPG_CHIP_SIZE);
+    Uint8* compressed = SDL_malloc(compressed_size);
+
+    if (compressed == NULL ||
+        compress2(compressed, &compressed_size, pixels, PPG_CHIP_SIZE * PPG_CHIP_SIZE, Z_BEST_COMPRESSION) != Z_OK) {
+        SDL_free(compressed);
+        return false;
+    }
+
+    const Uint32 size = 16 + trans_count * 3 + (Uint32)compressed_size;
+    const Uint8 header[16] = { 'p',
+                               'T',
+                               'E',
+                               'X',
+                               size >> 24,
+                               size >> 16,
+                               size >> 8,
+                               size,
+                               PPG_CHIP_SIZE / 16,
+                               PPG_CHIP_SIZE / 16,
+                               2,    // zlib
+                               0x81, // 8-bit indices
+                               0,
+                               0,
+                               trans_count >> 8,
+                               trans_count };
+    const Uint8 padding[3] = { 0 };
+
+    const bool success =
+        ByteBuffer_Append(ppg, header, sizeof(header)) && ByteBuffer_Append(ppg, trans, trans_count * 3) &&
+        ByteBuffer_Append(ppg, compressed, compressed_size) && ByteBuffer_Append(ppg, padding, (4 - size % 4) % 4);
+    SDL_free(compressed);
+    return success;
+}
+
+/// Builds the stage PPG: one pTEX per chip that `bgtex_stage_gbix` selects, layer by layer, followed by the rewrite
+/// chips.
+static bool build_ppg(
+    const StageRom* rom, const StageSource* source, const Uint8* tiles, size_t tiles_size, int palette_base,
+    int palette_rows, ByteBuffer* ppg
+) {
+    Uint16 layer_count = 0;
+    Uint32* tilemap = SDL_malloc(TILEMAP_SIZE * TILEMAP_SIZE * sizeof(Uint32));
+    Uint8* pixels = SDL_malloc(PPG_CHIP_SIZE * PPG_CHIP_SIZE);
+    int block_palettes[PPG_CHIP_BLOCKS * PPG_CHIP_BLOCKS];
+    bool success = tilemap != NULL && pixels != NULL &&
+                   program_u16(rom, rom->tables->use_scr + source->bg_index * 2, &layer_count) &&
+                   layer_count <= PPG_LAYERS;
+
+    for (int layer = 0; layer < layer_count && success; layer++) {
+        const Uint32 mask = bgtex_stage_gbix[source->area][layer];
+        success = build_tilemap(rom, source->bg_index, layer, tilemap);
+
+        for (int i = 0; i < source->layer_write_count && success; i++) {
+            const LayerWrite* write = &source->layer_writes[i];
+
+            if (write->layer == layer) {
+                success = write_block_columns(
+                    rom, source->bg_index, write->offset, write->block, write->first_column, write->columns, tilemap
+                );
+            }
+        }
+
+        for (int i = 0; i < PPG_LAYER_CHIPS && success; i++) {
+            if (!(mask & (0x80000000 >> i))) {
+                continue;
+            }
+
+            success =
+                draw_chip(
+                    tilemap, tiles, tiles_size, PPG_FIRST_CHIP + i, palette_base, palette_rows, pixels, block_palettes
+                ) &&
+                append_chip(ppg, pixels, block_palettes);
+        }
+    }
+
+    for (int i = 0; i < source->rewrite_chip_count && success; i++) {
+        const RewriteChip* chip = &source->rewrite_chips[i];
+
+        if (chip->blocks != 0) {
+            success = build_tilemap_from_blocks(rom, source->bg_index, chip->blocks, chip->block_count, tilemap);
+        } else {
+            success = build_tilemap(rom, source->bg_index, chip->layer, tilemap);
+        }
+
+        for (int j = 0; j < chip->palette_step_count && success; j++) {
+            success = apply_palette_step(rom, &chip->palette_steps[j], chip->layer, palette_base, tilemap);
+        }
+
+        for (int j = 0; j < chip->block_write_count && success; j++) {
+            const BlockWrite* write = &chip->block_writes[j];
+            success = write_block(rom, source->bg_index, write->offset, write->block, tilemap);
+        }
+
+        success =
+            success &&
+            draw_chip(tilemap, tiles, tiles_size, chip->chip, palette_base, palette_rows, pixels, block_palettes) &&
+            append_chip(ppg, pixels, block_palettes);
+    }
+
+    success = success && ByteBuffer_Append(ppg, "pEND", 4);
+    SDL_free(tilemap);
+    SDL_free(pixels);
+    return success;
+}
+
+/// Builds a texture group from CGs. Its trans table is padded to the group's `to_tex`.
+static bool write_cg_group(const CgGroupSource* source, const StageRom* rom) {
+    const ArcadeCgSource cg_source = {
+        .program = rom->program,
+        .program_base = ROM_PROGRAM_BASE,
+        .table = rom->tables->cg_table,
+        .entry_size = rom->tables->cg_entry_size,
+        .origin_offset = rom->tables->cg_origin_offset,
+        .graphics = rom->graphics,
+    };
+
+    int slot_count = 0;
+
+    for (int i = 0; i < source->range_count; i++) {
+        slot_count += source->ranges[i].count;
+    }
+
+    const size_t to_tex = texgrpdat[source->group].to_tex;
+    Sint32* cgs = SDL_malloc(slot_count * sizeof(Sint32));
+    ArcadeCgGroup group = { 0 };
+    Uint8* file = NULL;
+    bool success = cgs != NULL;
+
+    if (texgrpdat[source->group].is_8bpp != ((source->flags & ARCADE_CG_8BPP) != 0)) {
+        SDL_Log("8bpp flag of %s doesn't match its texture group", Cache_GetPath(source->file));
+        success = false;
+    }
+
+    for (int i = 0, slot = 0; i < source->range_count && success; i++) {
+        for (int j = 0; j < source->ranges[i].count; j++, slot++) {
+            const Uint16 cg = source->ranges[i].first + j;
+            cgs[slot] = ArcadeCg_Exists(&cg_source, cg) ? cg : -1;
+        }
+    }
+
+    success = success && ArcadeCg_BuildGroup(&cg_source, cgs, slot_count, source->flags, &group);
+
+    if (success && group.trans_size > to_tex) {
+        SDL_Log(
+            "Trans table of %s needs %zu bytes, but to_tex is %zu",
+            Cache_GetPath(source->file),
+            group.trans_size,
+            to_tex
+        );
+        success = false;
+    }
+
+    if (success) {
+        file = SDL_calloc(1, to_tex + group.texture_size);
+        success = file != NULL;
+    }
+
+    if (success) {
+        SDL_memcpy(file, group.trans_table, group.trans_size);
+        SDL_memcpy(file + to_tex, group.texture_table, group.texture_size);
+        success = Cache_Write(source->file, file, to_tex + group.texture_size);
+    }
+
+    if (!success) {
+        SDL_Log("Couldn't build %s", Cache_GetPath(source->file));
+    }
+
+    SDL_free(cgs);
+    SDL_free(file);
+    ArcadeCg_FreeGroup(&group);
+    return success;
+}
+
+static bool write_stage(const StageSource* source, const StageRom* rom) {
+    size_t tiles_size = 0;
+    size_t palette_count = 0;
+    int first_row = 0;
+    Uint16 palette_base = 0;
+    ByteBuffer ppg = { 0 };
+    Uint16* palette = NULL;
+    Uint8* tiles = NULL;
+    bool success = program_u16(rom, rom->tables->bg_pal_base_tbl + source->bg_index * 2, &palette_base);
+    palette_base = palette_base == 0x200 ? 0x240 : palette_base + 0x10;
+    const bool is_8bpp = !(palette_base & 0x200);
+
+    if (success) {
+        tiles = load_tiles(rom, source->bg_index, &tiles_size);
+        palette = load_stage_palette(rom, source, &palette_count, &first_row, is_8bpp);
+        success = tiles != NULL && palette != NULL && (palette_base & 0x1FF) * (is_8bpp ? 4 : 1) == first_row &&
+                  build_ppg(rom, source, tiles, tiles_size, palette_base, (int)(palette_count / 64), &ppg) &&
+                  Cache_Write(source->palette_file, palette, palette_count * sizeof(Uint16)) &&
+                  Cache_Write(source->ppg_file, ppg.data, ppg.size);
+    }
+
+    if (!success) {
+        SDL_Log("Couldn't build %s", Cache_GetPath(source->ppg_file));
+    }
+
+    SDL_free(tiles);
+    SDL_free(palette);
+    SDL_free(ppg.data);
+    return success;
+}
+
+/// @return `false` if the ROM set isn't loaded.
+static bool make_stage_rom(const Rom* const roms[ROM_GAME_COUNT], RomGame game, StageRom* result) {
+    const Rom* rom = roms[game];
+
+    if (rom == NULL) {
+        return false;
+    }
+
+    *result = (StageRom) {
+        .program = Rom_GetProgram(rom),
+        .graphics = Rom_GetGraphics(rom),
+        .tables = &stage_tables[game],
+    };
+    return true;
+}
+
+static bool is_rom_cached(RomGame game) {
+    for (int i = 0; i < SDL_arraysize(palette_sources); i++) {
+        const PaletteSource* source = &palette_sources[i];
+
+        if (source->game == game && !Cache_Exists(source->file)) {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < SDL_arraysize(stage_sources); i++) {
+        const StageSource* source = &stage_sources[i];
+
+        if (source->game == game && (!Cache_Exists(source->palette_file) || !Cache_Exists(source->ppg_file))) {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < SDL_arraysize(cg_group_sources); i++) {
+        const CgGroupSource* source = &cg_group_sources[i];
+
+        if (source->game == game && !Cache_Exists(source->file)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool ArcadeStage_NeedsRom(RomGame game) {
+    return !is_rom_cached(game);
+}
+
+void ArcadeStage_Init(const Rom* const roms[ROM_GAME_COUNT]) {
+    for (int i = 0; i < SDL_arraysize(palette_sources); i++) {
+        const PaletteSource* source = &palette_sources[i];
+        StageRom stage_rom;
+
+        if (!Cache_Exists(source->file) && make_stage_rom(roms, source->game, &stage_rom)) {
+            write_palette(source, stage_rom.graphics);
+        }
+    }
+
+    for (int i = 0; i < SDL_arraysize(stage_sources); i++) {
+        const StageSource* source = &stage_sources[i];
+        StageRom stage_rom;
+
+        if ((!Cache_Exists(source->palette_file) || !Cache_Exists(source->ppg_file)) &&
+            make_stage_rom(roms, source->game, &stage_rom)) {
+            write_stage(source, &stage_rom);
+        }
+    }
+
+    for (int i = 0; i < SDL_arraysize(cg_group_sources); i++) {
+        const CgGroupSource* source = &cg_group_sources[i];
+        StageRom stage_rom;
+
+        if (!Cache_Exists(source->file) && make_stage_rom(roms, source->game, &stage_rom)) {
+            write_cg_group(source, &stage_rom);
+        }
+    }
+
+    for (int game = 0; game < ROM_GAME_COUNT; game++) {
+        rom_processed[game] = is_rom_cached(game);
+    }
+}
+
+bool ArcadeStage_IsRomProcessed(RomGame game) {
+    return rom_processed[game];
+}

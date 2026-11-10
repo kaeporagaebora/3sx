@@ -335,9 +335,7 @@ void player_mv_4000(PLW* wk) { // 🟡
             wk->zuru_flag = false;
         }
 
-        if (!ArcadeBalance_IsEnabled()) {
-            check_omop_vital(wk);
-        }
+        check_omop_vital(wk);
     }
 
     if (Timer_Freeze == 0) {
@@ -492,11 +490,7 @@ void about_gauge_process(PLW* wk) { // 🟡
     eag_union(wk);
     sag_union(wk);
     mpg_union(wk);
-
-    // CPS3 has no equivalent max-gauge bit update.
-    if (!ArcadeBalance_IsEnabled()) {
-        add_sp_arts_gauge_maxbit(wk);
-    }
+    add_sp_arts_gauge_maxbit(wk);
 }
 
 void mpg_union(PLW* wk) { // 🟡
@@ -1168,7 +1162,7 @@ void check_omop_vital(PLW* wk) { // 🔴
             break;
         }
 
-        if (wk->player_number == 0) {
+        if (wk->player_number == CHAR_GILL) {
             if ((wk->wu.routine_no[1] == 4) && (wk->wu.routine_no[2] == 21)) {
                 if (ca_check_flag == 0) {
                     ca_check_flag = 1;

@@ -1,0 +1,49 @@
+#ifndef ROM_H
+#define ROM_H
+
+#include <SDL3/SDL.h>
+
+#include <stddef.h>
+
+/// SH-2 address at which SIMM1 is mapped. SIMM2 follows it directly.
+#define ROM_PROGRAM_BASE 0x06000000
+
+typedef enum RomGame {
+    ROM_GAME_SFIII,  // New Generation
+    ROM_GAME_SFIII3, // 3rd Strike
+    ROM_GAME_COUNT,
+} RomGame;
+
+/// A block of decoded ROM data. Empty (`data` is `NULL`) when the ROM set lacks it.
+typedef struct RomRegion {
+    const Uint8* data;
+    size_t size;
+} RomRegion;
+
+/// A CPS3 ROM set with every SIMM unpacked and decoded.
+typedef struct Rom Rom;
+
+/// @return File name of the .zip holding the ROM set, relative to resources.
+const char* Rom_GetZipName(RomGame game);
+
+/// Unzips and decodes every SIMM of the ROM set.
+/// @param path Path to the .zip file with the ROM set.
+/// @return New ROM on success, `NULL` on failure. Call `SDL_GetError` for details.
+Rom* Rom_Create(RomGame game, const char* path);
+
+void Rom_Destroy(Rom* rom);
+
+RomGame Rom_GetGame(const Rom* rom);
+
+/// @param simm SIMM number, 1–6. SIMM1 and SIMM2 hold program data, SIMM3–6 hold graphics.
+/// @return Decoded contents of the SIMM, or an empty region if the ROM set has no such SIMM.
+RomRegion Rom_GetSimm(const Rom* rom, int simm);
+
+/// @return Decrypted program SIMMs as one block in big-endian byte order, starting at `ROM_PROGRAM_BASE`.
+RomRegion Rom_GetProgram(const Rom* rom);
+
+/// @return Graphics SIMMs as one block, starting with SIMM3. PCM samples can be read directly at their CPS3 offsets.
+/// Character DMA reads this block at `offset ^ 1`.
+RomRegion Rom_GetGraphics(const Rom* rom);
+
+#endif

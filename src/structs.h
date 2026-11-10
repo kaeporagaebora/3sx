@@ -1,6 +1,7 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
+#include "constants.h"
 #include "sf33rd/AcrSDK/common/plcommon.h"
 #include "types.h"
 
@@ -248,7 +249,7 @@ typedef struct {
     XY xyz[3];
     s16 old_pos[3];
     s16 sync_suzi;
-    u16* suzi_offset;
+    s16 suzi_offset; /// Line of the family's layer whose line scroll the object follows
     MVXY mvxy;
     s16 direction;
     s16 dir_old;
@@ -338,7 +339,10 @@ typedef struct {
     s16 my_col_mode;
     s16 my_col_code;
     s16 my_priority;
+
+    /// Scroll space that this object is attached to. Object's own position is added to the base offset of its "family"
     s16 my_family;
+
     s16 my_ext_pri;
     s16 my_bright_type;
     s16 my_bright_level;
@@ -909,7 +913,7 @@ struct _SAVE_W {
     _PAD_INFOR Pad_Infor[2];
     u8 Difficulty;
     s8 Time_Limit;
-    u8 Battle_Number[2];
+    u8 Battle_Number[PLAY_TYPE_COUNT];
     u8 Damage_Level;
     u8 Handicap;
     u8 Partner_Type[2];
@@ -962,7 +966,7 @@ struct _REP_GAME_INFOR {
 struct _MINI_SAVE_W {
     _PAD_INFOR Pad_Infor[2];
     s8 Time_Limit;
-    u8 Battle_Number[2];
+    u8 Battle_Number[PLAY_TYPE_COUNT];
     u8 Damage_Level;
     _EXTRA_OPTION extra_option;
 };
@@ -1464,10 +1468,12 @@ typedef struct {
     PatternMap map;
 } PatternInstance;
 
+#define PATTERN_COLLECTION_SIZE 128
+
 typedef struct {
     s16 kazu;
-    PatternInstance* adr[64];
-    PatternInstance patt[64];
+    PatternInstance* adr[PATTERN_COLLECTION_SIZE];
+    PatternInstance patt[PATTERN_COLLECTION_SIZE];
 } PatternCollection;
 
 typedef struct {

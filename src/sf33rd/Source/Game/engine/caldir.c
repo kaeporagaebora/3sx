@@ -4,6 +4,7 @@
  */
 
 #include "sf33rd/Source/Game/engine/caldir.h"
+#include "arcade/arcade_balance.h"
 #include "common.h"
 
 const s32 rate_256_table[256][2] = {
@@ -762,6 +763,11 @@ s16 caldir_pos_032(s16 x1, s16 x2, s16 y1, s16 y2) {
     return (caldir_pos_256(x1, x2, y1, y2) + 4) >> 3 & 0x1F;
 }
 
+void add_pos_dir_032(WORK* wk, s16 sp) {
+    wk->xyz[0].cal += (sp * rate_256_table[wk->direction * 8][0]) >> 8;
+    wk->xyz[1].cal += (sp * rate_256_table[wk->direction * 8][1]) >> 8;
+}
+
 void add_pos_dir_064(WORK* wk, s16 sp) {
     wk->xyz[0].cal += (sp * rate_256_table[wk->direction * 4][0]) >> 8;
     wk->xyz[1].cal += (sp * rate_256_table[wk->direction * 4][1]) >> 8;
@@ -1061,9 +1067,14 @@ s16 cal_move_dir_forecast(WORK* wk, s16 tm) {
         return 0;
     }
 
-    ps[0].dp = (wk->mvxy.d[0].sp * (tm * tm)) / 2;
+    if (ArcadeBalance_IsEnabled()) {
+        ps[0].dp = (tm * tm / 2) * wk->mvxy.d[0].sp;
+        ps[1].dp = (tm * tm / 2) * wk->mvxy.d[1].sp;
+    } else {
+        ps[0].dp = (wk->mvxy.d[0].sp * (tm * tm)) / 2;
+        ps[1].dp = (wk->mvxy.d[1].sp * (tm * tm)) / 2;
+    }
     ps[0].dp = wk->xyz[0].cal + (ps[0].dp + (wk->mvxy.a[0].sp * tm));
-    ps[1].dp = (wk->mvxy.d[1].sp * (tm * tm)) / 2;
     ps[1].dp = wk->xyz[1].cal + (ps[1].dp + (wk->mvxy.a[1].sp * tm));
     return caldir_pos_032(wk->xyz[0].disp.pos, wk->xyz[1].disp.pos, ps[0].rp.h, ps[1].rp.h);
 }

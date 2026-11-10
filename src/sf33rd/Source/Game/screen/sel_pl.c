@@ -4,6 +4,7 @@
  */
 
 #include "sf33rd/Source/Game/screen/sel_pl.h"
+#include "arcade/arcade_stage.h"
 #include "common.h"
 #include "constants.h"
 #include "sf33rd/AcrSDK/common/pad.h"
@@ -51,6 +52,7 @@
 #include "sf33rd/Source/Game/system/work_sys.h"
 #include "sf33rd/Source/Game/ui/sc_sub.h"
 
+static void Route_Handicap_Pad();
 void Switch_Work();
 void Sel_PL_Control();
 void Sel_PL_Cont_1st();
@@ -135,6 +137,9 @@ u16 Color7[2];
 u8 Decide_Stage;
 u8 hc3alpha;
 
+/// Side whose pad makes the selections in VS mode against a CPU
+static s16 VS_Lead_ID;
+
 const s16 Cursor_Y_Data[6] = { 80, 104, 128, 80, 104, 128 };
 
 const u8 Arts_Y_Data[3][3] = { { 0, 1, 2 }, { 2, 0, 1 }, { 1, 2, 0 } };
@@ -151,6 +156,7 @@ s16 Select_Player() {
     }
 
     Scene_Cut = Cut_Cut_Cut();
+    Route_Handicap_Pad();
     Sel_PL_Control();
     Switch_Work();
     ID = 0;
@@ -161,14 +167,87 @@ s16 Select_Player() {
     return SEL_PL_X;
 }
 
-void Switch_Work() {
-    if (Mode_Type != MODE_NORMAL_TRAINING && Mode_Type != MODE_PARRY_TRAINING) {
+bool Sel_PL_Is_Sequential() {
+    if (Is_Training_Mode(Mode_Type)) {
+        return true;
+    }
+
+    return Mode_Type == MODE_VERSUS && (save_w[1].Partner_Type[0] || save_w[1].Partner_Type[1]);
+}
+
+s16 Sel_PL_Lead_ID() {
+    return Is_Training_Mode(Mode_Type) ? Champion : VS_Lead_ID;
+}
+
+static void Setup_VS_Lead_ID() {
+    if (save_w[1].Partner_Type[0] && !save_w[1].Partner_Type[1]) {
+        VS_Lead_ID = 1;
+    } else if (save_w[1].Partner_Type[1] && !save_w[1].Partner_Type[0]) {
+        VS_Lead_ID = 0;
+    } else {
+        // CPU vs CPU
+        VS_Lead_ID = (Interface_Type[0] == 0 && Interface_Type[1] != 0) ? 1 : 0;
+    }
+}
+
+/// Which side the lead pad controls during VS handicap selection
+static s16 Handicap_Focus(s16 lead_id) {
+    const s16 other_id = lead_id ^ 1;
+
+    // The lead sets its vital first, then the other side's.
+    // Whoever ends up choosing the stage keeps the pad until it's decided
+    if (SP_No[lead_id][2] == 0) {
+        return lead_id;
+    }
+
+    if (SP_No[other_id][2] == 0 || SP_No[other_id][2] == 2) {
+        return other_id;
+    }
+
+    return lead_id;
+}
+
+/// Lets the lead pad make the handicap selections for both sides in VS mode against a CPU
+static void Route_Handicap_Pad() {
+    if (Mode_Type != MODE_VERSUS || !Sel_PL_Is_Sequential() || Exit_No < 7) {
         return;
     }
 
+    const s16 lead_id = VS_Lead_ID;
+    const s16 focus_id = Handicap_Focus(lead_id);
+    const u16 sw = (lead_id == 0) ? p1sw_buff : p2sw_buff;
+
+    // Last frame the pad went to one side and the other got nothing, so its previous
+    // state is whatever either side had. Using it for the side in focus keeps a button
+    // still held when the focus moves from counting as a new press
+    const u16 prev_sw = p1sw_1 | p2sw_1;
+    const u16 prev_PLsw = PLsw[0][1] | PLsw[1][1];
+
+    if (focus_id == 0) {
+        p1sw_0 = PLsw[0][0] = sw;
+        p1sw_1 = prev_sw;
+        PLsw[0][1] = prev_PLsw;
+        p2sw_0 = p2sw_1 = PLsw[1][0] = PLsw[1][1] = 0;
+    } else {
+        p2sw_0 = PLsw[1][0] = sw;
+        p2sw_1 = prev_sw;
+        PLsw[1][1] = prev_PLsw;
+        p1sw_0 = p1sw_1 = PLsw[0][0] = PLsw[0][1] = 0;
+    }
+}
+
+void Switch_Work() {
+    s16 lead_id;
+
+    if (!Sel_PL_Is_Sequential() || Exit_No >= 7) {
+        return;
+    }
+
+    lead_id = Sel_PL_Lead_ID();
+
     switch (S_No[3]) {
     case 0:
-        if (Champion) {
+        if (lead_id) {
             p1sw_0 = 0;
         } else {
             p2sw_0 = 0;
@@ -178,13 +257,16 @@ void Switch_Work() {
 
     case 1:
         S_No[3]++;
-        Default_Training_Data(0);
-        Record_Data_Tr = 0;
-        Training_Disp_Work_Clear();
-        Menu_Cursor_X[0] = 0;
-        Training_Cursor = 0;
 
-        if (Champion) {
+        if (Is_Training_Mode(Mode_Type)) {
+            Default_Training_Data(0);
+            Record_Data_Tr = 0;
+            Training_Disp_Work_Clear();
+            Menu_Cursor_X[0] = 0;
+            Training_Cursor = 0;
+        }
+
+        if (lead_id) {
             p1sw_0 = p2sw_0;
             p1sw_1 = p2sw_0;
         } else {
@@ -195,7 +277,7 @@ void Switch_Work() {
         break;
 
     case 2:
-        if (Champion) {
+        if (lead_id) {
             p1sw_0 = p2sw_0;
         } else {
             p2sw_0 = p1sw_0;
@@ -255,6 +337,7 @@ void Sel_PL_Cont_1st() {
     Unit_Of_Timer = UNIT_OF_TIMER_MAX;
     Setup_Face_ID();
     Setup_1st_Play_Type();
+    Setup_VS_Lead_ID();
     Setup_Face_Sub();
     Time_Stop = 1;
     effect_A5_init();
@@ -326,7 +409,7 @@ void Setup_Face_ID() {
 }
 
 void Setup_1st_Play_Type() {
-    if (Play_Type == 1) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
         Play_Type_1st = 99;
     } else {
         Play_Type_1st = Aborigine;
@@ -429,7 +512,7 @@ void Setup_FACE_BG() {
 }
 
 s16 Setup_Face_X() {
-    if (Play_Type == 1) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
         return 604;
     }
 
@@ -441,7 +524,7 @@ s16 Setup_Face_X() {
 }
 
 s16 Setup_Face_Y() {
-    if (Play_Type == 1) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
         return 0;
     }
 
@@ -763,7 +846,7 @@ void PL_Sel_1st() {
             return;
         }
 
-        if (My_char[ID2] == 0) {
+        if (My_char[ID2] == CHAR_GILL) {
             return;
         }
 
@@ -804,12 +887,12 @@ void PL_Sel_2nd() {
         ret2 = check_without_SA();
         ret |= ret2;
 
-        if (ret != 0 || My_char[ID2] == 0) {
+        if (ret != 0 || My_char[ID2] == CHAR_GILL) {
             SP_No[ID2][3]++;
             Cursor_Timer[ID2] = 40;
             Go_Away_Red_Lines();
 
-            if (Mode_Type == MODE_NORMAL_TRAINING || Mode_Type == MODE_PARRY_TRAINING) {
+            if (Sel_PL_Is_Sequential()) {
                 S_No[3] = 1;
                 break;
             }
@@ -1067,7 +1150,7 @@ void Sel_PL_5th() {
 
     SP_No[ID][0]++;
 
-    if (Mode_Type == MODE_NORMAL_TRAINING || Mode_Type == MODE_PARRY_TRAINING) {
+    if (Sel_PL_Is_Sequential()) {
         S_No[3] = 1;
     }
 
@@ -1574,7 +1657,7 @@ void Exit_2nd() {
         }
 #endif
 
-        Push_LDREQ_Queue_BG(bg_w.stage);
+        Push_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area]);
         return;
     }
 
@@ -1675,7 +1758,7 @@ void Exit_6th() {
         return;
     }
 
-    if (!Check_LDREQ_Queue_BG(bg_w.stage)) {
+    if (!Check_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area])) {
         return;
     }
 
@@ -1921,28 +2004,53 @@ void Handicap_Stage_Select(s16 PL_id) {
     Handicap_Stage_Move_Sub(IO_Result);
 }
 
+static bool Is_VS_Stage_Selectable(s8 stage) {
+    switch (stage) {
+    case STAGE_3S_Q:
+    case STAGE_3S_BONUS_CAR:
+    case STAGE_3S_BONUS_BALLS:
+        return false;
+
+    case STAGE_3S_SHIN_AKUMA:
+        return ArcadeStage_IsRomProcessed(ROM_GAME_SFIII3);
+
+    case STAGE_NG_GILL:
+    case STAGE_NG_ALEX:
+    case STAGE_NG_RYU:
+    case STAGE_NG_YUN:
+    case STAGE_NG_DUDLEY:
+    case STAGE_NG_NECRO:
+    case STAGE_NG_IBUKI:
+    case STAGE_NG_ELENA:
+    case STAGE_NG_ORO:
+    case STAGE_NG_YANG:
+    case STAGE_NG_KEN:
+    case STAGE_NG_SEAN:
+        return ArcadeStage_IsRomProcessed(ROM_GAME_SFIII);
+
+    default:
+        return true;
+    }
+}
+
 void Handicap_Stage_Move_Sub(u16 sw) {
     switch (sw) {
     case SWK_LEFT:
-        if ((VS_Stage -= 1) < 0) {
-            VS_Stage = 20;
-        }
-
-        if (VS_Stage == 17) {
-            VS_Stage = 16;
-        }
+        do {
+            if ((VS_Stage -= 1) < 0) {
+                VS_Stage = VS_STAGE_RANDOM;
+            }
+        } while (!Is_VS_Stage_Selectable(VS_Stage));
 
         SE_dir_cursor_move();
         break;
 
     case SWK_RIGHT:
-        if ((VS_Stage += 1) > 20) {
-            VS_Stage = 0;
-        }
-
-        if (VS_Stage == 17) {
-            VS_Stage = 18;
-        }
+        do {
+            if ((VS_Stage += 1) > VS_STAGE_RANDOM) {
+                VS_Stage = 0;
+            }
+        } while (!Is_VS_Stage_Selectable(VS_Stage));
 
         SE_dir_cursor_move();
         break;
@@ -1953,7 +2061,7 @@ void Correct_Control_Time(s16 PL_id) {
     u8 xx;
     u8 zz;
 
-    if (Play_Type == 1) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
         return;
     }
 
@@ -1994,26 +2102,40 @@ s32 Check_Boss(s16 PL_id) {
     return Break_Into_CPU = 0;
 }
 
+Stage Resolve_Akuma_Stage(Stage stage) {
+    // Peers may differ in ROM availability, so netplay sticks to Akuma's stage to keep RNG and state in sync
+    if (!ArcadeStage_IsRomProcessed(ROM_GAME_SFIII3) || Mode_Type == MODE_NETWORK) {
+        return stage;
+    }
+
+    if (stage == STAGE_3S_AKUMA && (random_32() & 1)) {
+        return STAGE_3S_SHIN_AKUMA;
+    }
+
+    return stage;
+}
+
 u8 Setup_Battle_Country() {
     s16 Rnd32;
 
     if (Mode_Type == MODE_VERSUS) {
-        if (VS_Stage == 20) {
+        if (VS_Stage == VS_STAGE_RANDOM) {
             Rnd32 = random_32();
-            return Random_Stage_Data[1][Rnd32];
+            return Resolve_Akuma_Stage(Random_Stage_Data[1][Rnd32]);
         }
 
+        // An explicitly chosen stage is kept as is
         return VS_Stage;
     }
 
-    if (My_char[0] == 17 && My_char[1] == 17) {
+    if (My_char[0] == CHAR_Q && My_char[1] == CHAR_Q) {
         Rnd32 = random_32();
-        return Random_Stage_Data[0][Rnd32];
+        return Resolve_Akuma_Stage(Random_Stage_Data[0][Rnd32]);
     }
 
-    if (My_char[New_Challenger] == 17) {
-        return My_char[Champion];
+    if (My_char[New_Challenger] == CHAR_Q) {
+        return Resolve_Akuma_Stage(STAGE_OF_CHAR(My_char[Champion]));
     }
 
-    return My_char[New_Challenger];
+    return Resolve_Akuma_Stage(STAGE_OF_CHAR(My_char[New_Challenger]));
 }

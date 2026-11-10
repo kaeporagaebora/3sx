@@ -5,7 +5,7 @@
 
 #include "sf33rd/Source/Game/io/gd3rd_data.h"
 
-const LoadRequestEntry ldreq_tbl[] = {
+const LoadRequestEntry ldreq_tbl[LDREQ_TBL_SIZE] = {
     [0] = { .type = LDREQ_TEXTURE, .ix = 1, .frre = 2, .kokey = 3 },
     [1] = { .type = LDREQ_TEXTURE, .ix = 27, .frre = 2, .kokey = 3 },
     [2] = { .type = LDREQ_TEXTURE, .ix = 35, .frre = 2, .kokey = 3 },
@@ -300,8 +300,103 @@ const LoadRequestEntry ldreq_tbl[] = {
     [291] = { .type = LDREQ_COLOR, .ix = 19, .frre = 1, .kokey = 10 },
     [292] = { .type = LDREQ_KANJI, .ix = 151, .frre = 2, .kokey = 25 },
     [293] = { .type = LDREQ_KANJI, .ix = 152, .frre = 2, .kokey = 26 },
+
+    // Shin Akuma's stage
+    [294] = { .type = LDREQ_COLOR, .ix = 161, .frre = 1, .kokey = 2 },
+    [295] = { .type = LDREQ_TEXTURE, .ix = 46, .frre = 1, .kokey = 19 },
+    [296] = { .type = LDREQ_SCREEN, .ix = 55, .frre = 1, .kokey = 18 },
+
+    // NG Alex's stage
+    [297] = { .type = LDREQ_COLOR, .ix = 162, .frre = 1, .kokey = 2 },
+    [298] = { .type = LDREQ_SCREEN, .ix = 163, .frre = 1, .kokey = 18 },
+    [299] = { .type = LDREQ_TEXTURE, .ix = 100, .frre = 1, .kokey = 19 },
+    [300] = { .type = LDREQ_TEXTURE, .ix = 101, .frre = 1, .kokey = 19 }, // Ibuki's tanuki
+    [301] = { .type = LDREQ_COLOR, .ix = 164, .frre = 1, .kokey = 2 },    // Ibuki's tanuki palette
+
+    // NG Gill's stage. Its span starts at 300 to include the tanuki.
+    [302] = { .type = LDREQ_COLOR, .ix = 165, .frre = 1, .kokey = 2 },
+    [303] = { .type = LDREQ_SCREEN, .ix = 166, .frre = 1, .kokey = 18 },
+    [304] = { .type = LDREQ_TEXTURE, .ix = 102, .frre = 1, .kokey = 19 },
+
+    // First area of NG Ryu's stage
+    [305] = { .type = LDREQ_COLOR, .ix = 167, .frre = 1, .kokey = 2 },
+    [306] = { .type = LDREQ_SCREEN, .ix = 168, .frre = 1, .kokey = 18 },
+    [307] = { .type = LDREQ_TEXTURE, .ix = 103, .frre = 1, .kokey = 19 },
+
+    // Second area of NG Ryu's stage
+    [308] = { .type = LDREQ_COLOR, .ix = 169, .frre = 1, .kokey = 2 },
+    [309] = { .type = LDREQ_SCREEN, .ix = 170, .frre = 1, .kokey = 18 },
+    [310] = { .type = LDREQ_TEXTURE, .ix = 104, .frre = 1, .kokey = 19 },
+
+    // First area of NG Yun's stage
+    [311] = { .type = LDREQ_COLOR, .ix = 171, .frre = 1, .kokey = 2 },
+    [312] = { .type = LDREQ_SCREEN, .ix = 172, .frre = 1, .kokey = 18 },
+    [313] = { .type = LDREQ_TEXTURE, .ix = 105, .frre = 1, .kokey = 19 },
+    [314] = { .type = LDREQ_TEXTURE, .ix = 106, .frre = 1, .kokey = 19 }, // Yun and Yang watching
+
+    // Second area of NG Yun's stage
+    [315] = { .type = LDREQ_COLOR, .ix = 173, .frre = 1, .kokey = 2 },
+    [316] = { .type = LDREQ_SCREEN, .ix = 174, .frre = 1, .kokey = 18 },
+    [317] = { .type = LDREQ_TEXTURE, .ix = 107, .frre = 1, .kokey = 19 },
+
+    // First area of NG Dudley's stage
+    [318] = { .type = LDREQ_COLOR, .ix = 175, .frre = 1, .kokey = 2 },
+    [319] = { .type = LDREQ_SCREEN, .ix = 176, .frre = 1, .kokey = 18 },
+    [320] = { .type = LDREQ_TEXTURE, .ix = 108, .frre = 1, .kokey = 19 },
+    [321] = { .type = LDREQ_TEXTURE, .ix = 101, .frre = 1, .kokey = 19 }, // Ibuki's tanuki
+    [322] = { .type = LDREQ_COLOR, .ix = 164, .frre = 1, .kokey = 2 },    // Ibuki's tanuki palette
+
+    // Second area of NG Dudley's stage. Its objects use the first area's texture group.
+    [323] = { .type = LDREQ_COLOR, .ix = 177, .frre = 1, .kokey = 2 },
+    [324] = { .type = LDREQ_SCREEN, .ix = 178, .frre = 1, .kokey = 18 },
+    [325] = { .type = LDREQ_TEXTURE, .ix = 108, .frre = 1, .kokey = 19 },
+    [326] = { .type = LDREQ_TEXTURE, .ix = 101, .frre = 1, .kokey = 19 }, // Ibuki's tanuki
+    [327] = { .type = LDREQ_COLOR, .ix = 164, .frre = 1, .kokey = 2 },    // Ibuki's tanuki palette
+    // NG Necro's stage
+    [328] = { .type = LDREQ_COLOR, .ix = 179, .frre = 1, .kokey = 2 },
+    [329] = { .type = LDREQ_SCREEN, .ix = 180, .frre = 1, .kokey = 18 },
+    [330] = { .type = LDREQ_TEXTURE, .ix = 109, .frre = 1, .kokey = 19 },
+    // First area of NG Ibuki's stage
+    [331] = { .type = LDREQ_COLOR, .ix = 181, .frre = 1, .kokey = 2 },
+    [332] = { .type = LDREQ_SCREEN, .ix = 182, .frre = 1, .kokey = 18 },
+    [333] = { .type = LDREQ_TEXTURE, .ix = 110, .frre = 1, .kokey = 19 },
+    // Second area of NG Ibuki's stage
+    [334] = { .type = LDREQ_COLOR, .ix = 183, .frre = 1, .kokey = 2 },
+    [335] = { .type = LDREQ_SCREEN, .ix = 184, .frre = 1, .kokey = 18 },
+    [336] = { .type = LDREQ_TEXTURE, .ix = 110, .frre = 1, .kokey = 19 },
+    [337] = { .type = LDREQ_TEXTURE, .ix = 101, .frre = 1, .kokey = 19 }, // Ibuki's tanuki
+    [338] = { .type = LDREQ_COLOR, .ix = 164, .frre = 1, .kokey = 2 },    // Ibuki's tanuki palette
+    // Third area of NG Ibuki's stage
+    [339] = { .type = LDREQ_COLOR, .ix = 185, .frre = 1, .kokey = 2 },
+    [340] = { .type = LDREQ_SCREEN, .ix = 186, .frre = 1, .kokey = 18 },
+    [341] = { .type = LDREQ_TEXTURE, .ix = 110, .frre = 1, .kokey = 19 },
+    [342] = { .type = LDREQ_TEXTURE, .ix = 101, .frre = 1, .kokey = 19 }, // Ibuki's tanuki
+    [343] = { .type = LDREQ_COLOR, .ix = 164, .frre = 1, .kokey = 2 },    // Ibuki's tanuki palette
+    // First area of NG Elena's stage
+    [344] = { .type = LDREQ_COLOR, .ix = 187, .frre = 1, .kokey = 2 },
+    [345] = { .type = LDREQ_SCREEN, .ix = 188, .frre = 1, .kokey = 18 },
+    [346] = { .type = LDREQ_TEXTURE, .ix = 111, .frre = 1, .kokey = 19 },
+    // Second and third areas of NG Elena's stage. The bridge that falls into the second area is an object of the first.
+    [347] = { .type = LDREQ_COLOR, .ix = 189, .frre = 1, .kokey = 2 },
+    [348] = { .type = LDREQ_SCREEN, .ix = 190, .frre = 1, .kokey = 18 },
+    [349] = { .type = LDREQ_TEXTURE, .ix = 112, .frre = 1, .kokey = 19 },
+    [350] = { .type = LDREQ_TEXTURE, .ix = 111, .frre = 1, .kokey = 19 },
+    // NG Oro's stage
+    [351] = { .type = LDREQ_COLOR, .ix = 191, .frre = 1, .kokey = 2 },
+    [352] = { .type = LDREQ_SCREEN, .ix = 192, .frre = 1, .kokey = 18 },
+    [353] = { .type = LDREQ_TEXTURE, .ix = 113, .frre = 1, .kokey = 19 },
+    [354] = { .type = LDREQ_TEXTURE, .ix = 101, .frre = 1, .kokey = 19 }, // Ibuki's tanuki
+    [355] = { .type = LDREQ_COLOR, .ix = 164, .frre = 1, .kokey = 2 },    // Ibuki's tanuki palette
+
+    // NG Sean's stage
+    [356] = { .type = LDREQ_COLOR, .ix = 193, .frre = 1, .kokey = 2 },
+    [357] = { .type = LDREQ_SCREEN, .ix = 194, .frre = 1, .kokey = 18 },
+    [358] = { .type = LDREQ_TEXTURE, .ix = 114, .frre = 1, .kokey = 19 },
+    [359] = { .type = LDREQ_TEXTURE, .ix = 115, .frre = 1, .kokey = 19 }, // Buildings (effect 44)
 };
 
+/// Load request spans. Spans from 20 on hold the resources of area `index - 20`. AREA_3S_Q's span loads Ken's stage
+/// (Q's stage used to load it by stage number), but no stage uses that area.
 const Span spans[] = {
     { .start = 0, .length = 5 },   { .start = 5, .length = 3 },   { .start = 10, .length = 4 },
     { .start = 15, .length = 4 },  { .start = 19, .length = 3 },  { .start = 25, .length = 5 },
@@ -314,8 +409,13 @@ const Span spans[] = {
     { .start = 120, .length = 3 }, { .start = 125, .length = 3 }, { .start = 130, .length = 3 },
     { .start = 135, .length = 3 }, { .start = 140, .length = 3 }, { .start = 145, .length = 3 },
     { .start = 150, .length = 3 }, { .start = 155, .length = 3 }, { .start = 160, .length = 3 },
-    { .start = 165, .length = 3 }, { .start = 170, .length = 3 }, { .start = 175, .length = 3 },
-    { .start = 180, .length = 3 }, { .start = 185, .length = 3 }, { .start = 190, .length = 3 },
-    { .start = 195, .length = 3 }, { .start = 200, .length = 5 }, { .start = 206, .length = 4 },
-    { .start = 22, .length = 3 },
+    { .start = 165, .length = 3 }, { .start = 170, .length = 3 }, { .start = 294, .length = 3 },
+    { .start = 175, .length = 3 }, { .start = 180, .length = 3 }, { .start = 185, .length = 3 },
+    { .start = 190, .length = 3 }, { .start = 195, .length = 3 }, { .start = 200, .length = 5 },
+    { .start = 206, .length = 4 }, { .start = 300, .length = 5 }, { .start = 297, .length = 5 },
+    { .start = 305, .length = 3 }, { .start = 308, .length = 3 }, { .start = 311, .length = 4 },
+    { .start = 315, .length = 3 }, { .start = 318, .length = 5 }, { .start = 323, .length = 5 },
+    { .start = 328, .length = 3 }, { .start = 331, .length = 3 }, { .start = 334, .length = 5 },
+    { .start = 339, .length = 5 }, { .start = 344, .length = 3 }, { .start = 347, .length = 4 },
+    { .start = 351, .length = 5 }, { .start = 356, .length = 4 },
 };

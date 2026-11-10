@@ -1,10 +1,6 @@
 #if CRS_APP_DRIVER_SDL
 
 #include "platform/app/sdl/sdl_app.h"
-#include "arcade/arcade_balance.h"
-#if ARCADE_ROM_TEXTURES
-#include "arcade/arcade_texture.h"
-#endif
 #include "args.h"
 #include "common.h"
 #include "main.h"
@@ -39,7 +35,7 @@
 #include "test/test_runner.h"
 #endif
 
-#include "port/io/afs.h"
+#include "port/io/resource.h"
 #include "port/resources.h"
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -182,8 +178,7 @@ static bool full_init() {
     init_windows_console();
 #endif
 
-    ArcadeBalance_Init();
-    AFS_Init(Resources_GetAFSPath(), 256 * 1024);
+    Resource_Init(Resources_GetAFSPath(), 256 * 1024);
 
 #if STATCHECK
     if (!TestRunner_Init(get_args()->statcheck.ram_archive_path)) {
@@ -197,11 +192,8 @@ static bool full_init() {
 }
 
 static void cleanup() {
-#if ARCADE_ROM_TEXTURES
-    ArcadeTexture_Finish();
-#endif
-
-    AFS_Finish();
+    Main_Finish();
+    Resource_Finish();
     Config_Destroy();
     SDLGenericRenderer_Quit();
 }
@@ -287,7 +279,7 @@ static void begin_frame() {
     ImGuiW_NewFrame();
 #endif
 
-    AFS_RunServer();
+    Resource_RunServer();
 }
 
 static void center_rect(SDL_Rect* rect, int win_w, int win_h) {

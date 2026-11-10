@@ -362,7 +362,9 @@ void Com_Guard(PLW* wk) {
         return;
     }
 
-    if (wk->wu.routine_no[1] == 1 && PL_Blow_Off_Data[wk->wu.routine_no[2]] == 2) {
+    // While routine_no[3] is 0, routine_no[2] still holds the reaction code from the hit check rather than a damage
+    // routine number. Wait for Player_damage to convert it
+    if (wk->wu.routine_no[1] == 1 && wk->wu.routine_no[3] != 0 && PL_Blow_Off_Data[wk->wu.routine_no[2]] == 2) {
         Next_Be_Float(wk);
         return;
     }
@@ -439,7 +441,7 @@ static s16 Check_Hamari(PLW* wk) {
     Rnd = random_32_com() & 1;
     limit = Rnd + 3;
 
-    if (((PLW*)wk->wu.target_adrs)->player_number == 4 && tech == 3) {
+    if (((PLW*)wk->wu.target_adrs)->player_number == CHAR_DUDLEY && tech == 3) {
         limit--;
     } else if (tech != 0 && tech != 1) {
         return 0;
@@ -470,7 +472,7 @@ void Com_Guard_VS_Shell(PLW* wk) {
     Check_Guard_Type(wk, &tmw->wu);
 
     if (Timer_00[wk->wu.id] == 0) {
-        if (wk->player_number != 18) {
+        if (wk->player_number != CHAR_TWELVE) {
             if (wk->wu.routine_no[1] != 1) {
                 Exit_Damage_Sub(wk);
             }
@@ -720,6 +722,16 @@ void Damage_1st(PLW* wk) {
     case 0:
         if (wk->py->flag) {
             CP_No[wk->wu.id][1] = 9;
+            break;
+        }
+
+        if (wk->wu.routine_no[1] != 1) {
+            Exit_Damage_Sub(wk);
+            break;
+        }
+
+        if (wk->wu.routine_no[3] == 0) {
+            // Damage reaction hasn't been converted to a damage routine number yet
             break;
         }
 

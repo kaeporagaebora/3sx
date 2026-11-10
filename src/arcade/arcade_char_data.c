@@ -1,13 +1,10 @@
 #include "arcade/arcade_char_data.h"
-#include "arcade/rom_load.h"
+#include "arcade/rom/rom.h"
 #include "constants.h"
-#include "port/resources.h"
 #include "sf33rd/Source/Game/rendering/texgroup_data.h"
 #include "structs.h"
 
 #include <SDL3/SDL.h>
-
-#define BASE_OFFSET 0x6000000
 
 // Uncomment to enable parsed char data dumping to dump folder
 // #define DUMP_CHAR_DATA
@@ -61,12 +58,12 @@ typedef struct CharacterCgMap {
     size_t range_count;
 } CharacterCgMap;
 
-static CharDataImage data[NUM_CHARS] = { 0 };
+static CharDataImage data[CHAR_COUNT] = { 0 };
 static bool initialized = false;
 
 // Forward decls
-static const CharacterCgMap cg_maps[NUM_CHARS];
-static const LocationData location_data[NUM_CHARS];
+static const CharacterCgMap cg_maps[CHAR_COUNT];
+static const LocationData location_data[CHAR_COUNT];
 static const size_t section_element_sizes[CHAR_DATA_SECTION_COUNT];
 
 static int SDLCALL compare_u32(const void* lhs, const void* rhs) {
@@ -91,7 +88,7 @@ Uint16 ArcadeCharData_RemapCgNumber(Uint16 number, Character character) {
     const int default_owner = number / 0x600;
     Sint32 default_adjusted = -1;
 
-    if (default_owner < NUM_CHARS) {
+    if (default_owner < CHAR_COUNT) {
         const Sint32 adjusted = number + cg_maps[default_owner].default_delta;
 
         if (adjusted >= texgrpdat[default_owner + 1].num_of_1st &&
@@ -107,7 +104,7 @@ Uint16 ArcadeCharData_RemapCgNumber(Uint16 number, Character character) {
             return default_adjusted;
         }
 
-        for (int owner = 0; owner < NUM_CHARS; owner++) {
+        for (int owner = 0; owner < CHAR_COUNT; owner++) {
             if ((pass == 0) != (owner == character)) {
                 continue;
             }
@@ -149,7 +146,7 @@ static void* read_char_table(SDL_IOStream* rom, Location location, Character cha
             break;
         }
 
-        offsets[offset_count] = value - BASE_OFFSET - location.offset;
+        offsets[offset_count] = value - ROM_PROGRAM_BASE - location.offset;
     }
 
     // Calculate script sizes
@@ -376,7 +373,7 @@ static void* read_sernd(SDL_IOStream* rom, Location location) {
 
     for (int i = 0; i < offset_count; i++) {
         SDL_ReadU32BE(rom, offsets);
-        *offsets -= (BASE_OFFSET + location.offset);
+        *offsets -= (ROM_PROGRAM_BASE + location.offset);
         offsets++;
     }
 
@@ -475,19 +472,11 @@ static void dump_data(CharInitData* data, Character character) {
 }
 #endif
 
-void ArcadeCharData_Init() {
-    const char* rom_path = Resources_GetPath("sfiii3nr1.zip");
-    size_t rom_size = 0;
-    void* rom = Rom_Load(rom_path, &rom_size);
-    SDL_free((void*)rom_path);
+void ArcadeCharData_Init(const Rom* rom) {
+    const RomRegion program = Rom_GetProgram(rom);
+    SDL_IOStream* io = SDL_IOFromConstMem(program.data, program.size);
 
-    if (rom == NULL) {
-        return;
-    }
-
-    SDL_IOStream* io = SDL_IOFromConstMem(rom, rom_size);
-
-    for (int character = 0; character < NUM_CHARS; character++) {
+    for (int character = 0; character < CHAR_COUNT; character++) {
         const LocationData* locations = &location_data[character];
         CharDataImage* image = &data[character];
         CharInitData* dst = &image->tables;
@@ -545,11 +534,10 @@ void ArcadeCharData_Init() {
 
     initialized = true;
     SDL_CloseIO(io);
-    SDL_free(rom);
 }
 
 const CharInitData* ArcadeCharData_Get(Character character) {
-    if (!initialized || character >= NUM_CHARS) {
+    if (!initialized || character >= CHAR_COUNT) {
         return NULL;
     }
 
@@ -593,9 +581,9 @@ static bool get_ps2_section_span(const void* ps2_data, size_t ps2_size, CharData
 }
 
 bool ArcadeCharData_Apply3SXRenderingConventions(Character character, const void* ps2_data, size_t ps2_size) {
-    static bool adapted[NUM_CHARS] = { false };
+    static bool adapted[CHAR_COUNT] = { false };
 
-    if (!initialized || character >= NUM_CHARS) {
+    if (!initialized || character >= CHAR_COUNT) {
         return false;
     }
 
@@ -731,7 +719,7 @@ static const CgRemapRange remy_cg_ranges[] = {
     { .first = 0x7141, .last = 0x714B, .delta = -0x07C1 },
 };
 
-static const CharacterCgMap cg_maps[NUM_CHARS] = {
+static const CharacterCgMap cg_maps[CHAR_COUNT] = {
     [CHAR_GILL] = { .default_delta = 0x0000, .ranges = gill_cg_ranges, .range_count = SDL_arraysize(gill_cg_ranges) },
     [CHAR_ALEX] = { .default_delta = 0x0020, .ranges = alex_cg_ranges, .range_count = SDL_arraysize(alex_cg_ranges) },
     [CHAR_RYU] = { .default_delta = -0x01E0, .ranges = ryu_cg_ranges, .range_count = SDL_arraysize(ryu_cg_ranges) },
@@ -800,7 +788,7 @@ static const size_t section_element_sizes[CHAR_DATA_SECTION_COUNT] = {
     [CHAR_DATA_PROT] = sizeof(UNK_Data),
 };
 
-static const LocationData location_data[NUM_CHARS] = {
+static const LocationData location_data[CHAR_COUNT] = {
     {
         .nmca = { .offset = 0x1CB230, .size = 0x2660 },
         .dmca = { .offset = 0x1CD890, .size = 0x25B4 },

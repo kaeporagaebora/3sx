@@ -5,8 +5,8 @@
 
 #include "sf33rd/Source/Game/stage/tate00.h"
 #include "common.h"
-#include "sf33rd/Source/Game/engine/workuser.h"
 #include "sf33rd/Source/Game/engine/pls02.h"
+#include "sf33rd/Source/Game/engine/workuser.h"
 #include "sf33rd/Source/Game/stage/bg.h"
 #include "sf33rd/Source/Game/stage/bg000.h"
 #include "sf33rd/Source/Game/stage/bg010.h"
@@ -22,16 +22,67 @@
 #include "sf33rd/Source/Game/stage/bg120.h"
 #include "sf33rd/Source/Game/stage/bg130.h"
 #include "sf33rd/Source/Game/stage/bg140.h"
-#include "sf33rd/Source/Game/stage/bg150.h"
 #include "sf33rd/Source/Game/stage/bg160.h"
-#include "sf33rd/Source/Game/stage/bg180.h"
+#include "sf33rd/Source/Game/stage/bg170.h"
 #include "sf33rd/Source/Game/stage/bg190.h"
+#include "sf33rd/Source/Game/stage/bg200.h"
 #include "sf33rd/Source/Game/stage/bg_sub.h"
 #include "sf33rd/Source/Game/stage/bns_bg2.h"
 #include "sf33rd/Source/Game/stage/bonus_bg.h"
+#include "sf33rd/Source/Game/stage/ng/bg230.h"
+#include "sf33rd/Source/Game/stage/ng/bg240.h"
+#include "sf33rd/Source/Game/stage/ng/bg250.h"
+#include "sf33rd/Source/Game/stage/ng/bg260.h"
+#include "sf33rd/Source/Game/stage/ng/bg270.h"
+#include "sf33rd/Source/Game/stage/ng/bg280.h"
+#include "sf33rd/Source/Game/stage/ng/bg300.h"
+#include "sf33rd/Source/Game/stage/ng/bg320.h"
+#include "sf33rd/Source/Game/stage/ng/bg340.h"
+#include "sf33rd/Source/Game/stage/ng/bg370.h"
+#include "sf33rd/Source/Game/stage/ng/bg380.h"
+#include "sf33rd/Source/Game/stage/ng/bg390.h"
 
-void (*ta_move_tbl[22])() = { BG000, BG010, BG020, BG030, BG040, BG050, BG060, BG070, BG080, BG090,    BG100,
-                              BG010, BG120, BG130, BG140, BG150, BG160, BG180, BG180, BG190, Bonus_bg, Bonus_bg2 };
+void (*ta_move_tbl[AREA_COUNT])() = {
+    [AREA_3S_GILL] = BG000,
+    [AREA_3S_ALEX] = BG010,
+    [AREA_3S_RYU] = BG020,
+    [AREA_3S_YUN] = BG030,
+    [AREA_3S_DUDLEY] = BG040,
+    [AREA_3S_NECRO] = BG050,
+    [AREA_3S_HUGO] = BG060,
+    [AREA_3S_IBUKI] = BG070,
+    [AREA_3S_ELENA] = BG080,
+    [AREA_3S_ORO] = BG090,
+    [AREA_3S_YANG] = BG100,
+    [AREA_3S_KEN] = BG010,
+    [AREA_3S_SEAN] = BG120,
+    [AREA_3S_URIEN] = BG130,
+    [AREA_3S_AKUMA] = BG140,
+    [AREA_3S_SHIN_AKUMA] = BG140,
+    [AREA_3S_CHUNLI] = BG160,
+    [AREA_3S_MAKOTO] = BG170,
+    [AREA_3S_Q] = BG190,
+    [AREA_3S_TWELVE] = BG190,
+    [AREA_3S_REMY] = BG200,
+    [AREA_3S_BONUS_CAR] = Bonus_bg,
+    [AREA_3S_BONUS_BALLS] = Bonus_bg2,
+    [AREA_NG_GILL] = BG230,
+    [AREA_NG_ALEX] = BG240,
+    [AREA_NG_RYU_A] = BG260,
+    [AREA_NG_RYU_B] = BG270,
+    [AREA_NG_YUN_A] = BG280,
+    [AREA_NG_YUN_B] = BG280,
+    [AREA_NG_DUDLEY_A] = BG300,
+    [AREA_NG_DUDLEY_B] = BG300,
+    [AREA_NG_NECRO] = BG320,
+    [AREA_NG_IBUKI_A] = BG340,
+    [AREA_NG_IBUKI_B] = BG340,
+    [AREA_NG_IBUKI_C] = BG340,
+    [AREA_NG_ELENA_A] = BG370,
+    [AREA_NG_ELENA_B] = BG380,
+    [AREA_NG_ORO] = BG390,
+    [AREA_NG_SEAN] = BG250,
+};
 
 void ta0_init00();
 void ta0_init01();
@@ -53,10 +104,7 @@ void TATE00() {
 
 void ta0_init00() {
     bg_w.bg_routine++;
-
-    // Calling this function is necessary for Random_ix16 to be in sync with the arcade version
-    random_16();
-
+    bg_w.object_set = random_16() & 3;
     bg_initialize();
 }
 

@@ -5,6 +5,7 @@
 
 #include "sf33rd/Source/Game/animation/lose_pl.h"
 #include "common.h"
+#include "sf33rd/Source/Game/animation/ng/bridge_fall.h"
 #include "sf33rd/Source/Game/effect/effc1.h"
 #include "sf33rd/Source/Game/engine/charset.h"
 #include "sf33rd/Source/Game/engine/plcnt.h"
@@ -13,15 +14,21 @@
 #include "sf33rd/Source/Game/stage/bg_data.h"
 #include "sf33rd/Source/Game/system/work_sys.h"
 
-const s16 loser_type_tbl[20] = { 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0 };
+const s16 loser_type_tbl[CHAR_COUNT] = { 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0 };
 
-const s16 meta_lose_tbl[20] = { 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 28, 24, 24, 24, 24, 24, 24 };
+const s16 meta_lose_tbl[CHAR_COUNT] = {
+    24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 28, 24, 24, 24, 24, 24, 24
+};
 
 void lose_player(PLW* wk) {
     void (*lose_jp_tbl[4])(PLW*) = { Lose_00000, Lose_10000, Lose_20000, Lose_30000 };
 
     if (My_char[wk->wu.id] != wk->player_number) {
         meta_lose_pause(wk);
+        return;
+    }
+
+    if (bridge_fall_loser(wk)) {
         return;
     }
 
@@ -38,6 +45,10 @@ void Lose_00000(PLW* wk) {
 }
 
 void Lose_10000(PLW* wk) {
+    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
+        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
+    }
+
     if ((pcon_rno[0] == 2) && (pcon_rno[1] == 3)) {
         switch (wk->wu.routine_no[3]) {
         case 0:
@@ -70,14 +81,14 @@ void Lose_10000(PLW* wk) {
             break;
         }
     }
-
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
-    }
 }
 
 void Lose_20000(PLW* wk) {
     s16 work;
+
+    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
+        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
+    }
 
     if ((pcon_rno[0] == 2) && (pcon_rno[1] == 3)) {
         Judge_normal_loser(wk);
@@ -106,13 +117,13 @@ void Lose_20000(PLW* wk) {
         Normal_normal_Loser(wk);
         break;
     }
-
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
-    }
 }
 
 void Lose_30000(PLW* wk) {
+    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
+        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
+    }
+
     if ((pcon_rno[0] == 2) && (pcon_rno[1] == 3)) {
         switch (wk->wu.routine_no[3]) {
         case 0:
@@ -142,14 +153,14 @@ void Lose_30000(PLW* wk) {
             break;
         }
     }
-
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
-    }
 }
 
 void Normal_normal_Loser(PLW* wk) {
     s16 work;
+
+    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
+        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
+    }
 
     if ((pcon_rno[1] == 0) || (pcon_rno[1] == 4)) {
         return;
@@ -168,14 +179,14 @@ void Normal_normal_Loser(PLW* wk) {
         char_move(&wk->wu);
         break;
     }
-
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
-    }
 }
 
 void Judge_normal_loser(PLW* wk) {
     s16 work;
+
+    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
+        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
+    }
 
     switch (wk->wu.routine_no[3]) {
     case 0:
@@ -191,14 +202,14 @@ void Judge_normal_loser(PLW* wk) {
         char_move(&wk->wu);
         break;
     }
-
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
-    }
 }
 
 void meta_lose_pause(PLW* wk) {
     bg_app_stop = 1;
+
+    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
+        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
+    }
 
     if ((pcon_rno[1] == 0) || (pcon_rno[1] == 4)) {
         return;
@@ -214,9 +225,5 @@ void meta_lose_pause(PLW* wk) {
     case 9:
         char_move(&wk->wu);
         break;
-    }
-
-    if (set_field_hosei_flag(&plw[wk->wu.id], scrr, 1) != 0) {
-        set_field_hosei_flag(&plw[wk->wu.id], scrl, 0);
     }
 }

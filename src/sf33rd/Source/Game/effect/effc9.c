@@ -18,6 +18,7 @@
 #include "sf33rd/Source/Game/sound/se_data.h"
 #include "sf33rd/Source/Game/stage/bg.h"
 #include "sf33rd/Source/Game/stage/bg_sub.h"
+#include "sf33rd/Source/Game/stage/ng/bg370.h"
 
 // forward declarations
 
@@ -26,8 +27,35 @@ const u8 sel_ejg_ix_table[2][2][4];
 const u16 ag_cc_table[8];
 const s16 app_pos_hosei[3][3];
 const s16 judge_gals_kage_tbl[8][4];
-const u8 ag_sel_table[22][4][4];
+const u8 ag_sel_table[STAGE_COUNT][4][4];
 u32* ag_char_table[];
+
+/// Waits for the bridge on New Generation Elena's stage to move, then falls
+static void eff_c9_fall_with_bridge(WORK_Other* ewk) {
+    switch (ewk->wu.routine_no[2]) {
+    case 0:
+        if (ewk->wu.old_pos[1] != bg_w.bridge.y) {
+            ewk->wu.mvxy.a[0].sp = ewk->wu.mvxy.a[1].sp = 0;
+            ewk->wu.mvxy.d[0].sp = 0;
+            ewk->wu.mvxy.d[1].sp = -0x3800;
+            ewk->wu.mvxy.kop[0] = ewk->wu.mvxy.kop[1] = 0;
+            ewk->wu.kage_flag = 0;
+            ewk->wu.routine_no[2]++;
+        }
+
+        break;
+
+    case 1:
+        add_mvxy_speed(&ewk->wu);
+        cal_mvxy_speed(&ewk->wu);
+
+        if (ewk->wu.mvxy.a[1].sp < -0x100000) {
+            ewk->wu.mvxy.d[1].sp = 0;
+        }
+
+        break;
+    }
+}
 
 void effect_C9_move(WORK_Other* ewk) {
     s16 scrc;
@@ -61,6 +89,7 @@ void effect_C9_move(WORK_Other* ewk) {
         ewk->wu.position_x = ewk->wu.xyz[0].disp.pos;
         ewk->wu.position_y = ewk->wu.xyz[1].disp.pos;
         ewk->wu.position_z = ewk->wu.xyz[2].disp.pos;
+        ewk->wu.old_pos[1] = bg_w.bridge.y;
         sort_push_request(&ewk->wu);
         break;
 
@@ -144,6 +173,19 @@ void effect_C9_move(WORK_Other* ewk) {
                 }
 
                 break;
+
+            case 3:
+                // New Generation's judges fall with the bridge on Elena's stage
+                if (Event_Judge_Gals < 0 && bg370_is_on_bridge() && Round_num == 0) {
+                    ewk->wu.routine_no[1] = 5;
+                    ewk->wu.routine_no[2] = 0;
+                }
+
+                break;
+
+            case 5:
+                eff_c9_fall_with_bridge(ewk);
+                break;
             }
         }
 
@@ -214,8 +256,9 @@ void setup_EJG_index() {
     }
 }
 
-u32* ag_char_table[] = { _ag_00_char_table, _ag_01_char_table, _ag_02_char_table, _ag_03_char_table,
-                         _ag_04_char_table, _ag_05_char_table, _ag_06_char_table, _ag_07_char_table };
+u32* ag_char_table[] = { _ag_char_table.judges[0], _ag_char_table.judges[1], _ag_char_table.judges[2],
+                         _ag_char_table.judges[3], _ag_char_table.judges[4], _ag_char_table.judges[5],
+                         _ag_char_table.judges[6], _ag_char_table.judges[7] };
 
 const s32 efy_data[6] = { 40, -368, -851968, 32768, 229376, -24576 };
 
@@ -228,25 +271,40 @@ const s16 app_pos_hosei[3][3] = { { -64, -6, -2 }, { 0, -8, -4 }, { 64, -6, -2 }
 const s16 judge_gals_kage_tbl[8][4] = { { 0, -6, 32, 12 }, { 0, -6, 32, 14 }, { 0, -6, 32, 8 },  { 0, -6, 32, 8 },
                                         { 0, -6, 32, 8 },  { 0, -6, 32, 10 }, { 0, -6, 32, 12 }, { 0, -6, 32, 16 } };
 
-const u8 ag_sel_table[22][4][4] = { { { 6, 7, 3, 0 }, { 6, 5, 1, 0 }, { 6, 0, 5, 0 }, { 4, 7, 1, 0 } },
-                                    { { 6, 5, 1, 0 }, { 2, 7, 6, 0 }, { 3, 0, 1, 0 }, { 5, 4, 0, 0 } },
-                                    { { 5, 0, 1, 0 }, { 2, 5, 1, 0 }, { 3, 5, 4, 0 }, { 2, 4, 5, 0 } },
-                                    { { 2, 5, 4, 0 }, { 6, 5, 4, 0 }, { 0, 3, 1, 0 }, { 2, 3, 4, 0 } },
-                                    { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
-                                    { { 5, 7, 1, 0 }, { 6, 5, 1, 0 }, { 4, 7, 3, 0 }, { 2, 7, 6, 0 } },
-                                    { { 2, 0, 5, 0 }, { 5, 7, 1, 0 }, { 3, 0, 1, 0 }, { 0, 7, 1, 0 } },
-                                    { { 0, 7, 6, 0 }, { 2, 5, 1, 0 }, { 5, 0, 1, 0 }, { 4, 5, 0, 0 } },
-                                    { { 6, 4, 1, 0 }, { 6, 7, 3, 0 }, { 0, 5, 2, 0 }, { 6, 5, 1, 0 } },
-                                    { { 4, 5, 0, 0 }, { 6, 7, 1, 0 }, { 3, 0, 1, 0 }, { 6, 5, 0, 0 } },
-                                    { { 4, 5, 0, 0 }, { 3, 0, 1, 0 }, { 5, 0, 2, 0 }, { 4, 3, 2, 0 } },
-                                    { { 2, 0, 1, 0 }, { 6, 5, 3, 0 }, { 4, 0, 1, 0 }, { 3, 2, 5, 0 } },
-                                    { { 5, 4, 1, 0 }, { 6, 0, 1, 0 }, { 0, 3, 2, 0 }, { 6, 0, 1, 0 } },
-                                    { { 0, 7, 5, 0 }, { 6, 3, 0, 0 }, { 6, 3, 1, 0 }, { 3, 7, 2, 0 } },
-                                    { { 0, 2, 1, 0 }, { 3, 7, 6, 0 }, { 5, 2, 0, 0 }, { 0, 4, 1, 0 } },
-                                    { { 4, 5, 0, 0 }, { 3, 0, 1, 0 }, { 5, 0, 2, 0 }, { 4, 3, 2, 0 } },
-                                    { { 0, 7, 6, 0 }, { 2, 5, 1, 0 }, { 5, 0, 1, 0 }, { 4, 5, 0, 0 } },
-                                    { { 5, 0, 1, 0 }, { 6, 5, 1, 0 }, { 4, 2, 3, 0 }, { 7, 7, 7, 0 } },
-                                    { { 5, 7, 1, 0 }, { 6, 5, 1, 0 }, { 4, 7, 3, 0 }, { 2, 7, 6, 0 } },
-                                    { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
-                                    { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
-                                    { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } } };
+const u8 ag_sel_table[STAGE_COUNT][4][4] = {
+    [STAGE_3S_GILL] = { { 6, 7, 3, 0 }, { 6, 5, 1, 0 }, { 6, 0, 5, 0 }, { 4, 7, 1, 0 } },
+    [STAGE_3S_ALEX] = { { 6, 5, 1, 0 }, { 2, 7, 6, 0 }, { 3, 0, 1, 0 }, { 5, 4, 0, 0 } },
+    [STAGE_3S_RYU] = { { 5, 0, 1, 0 }, { 2, 5, 1, 0 }, { 3, 5, 4, 0 }, { 2, 4, 5, 0 } },
+    [STAGE_3S_YUN] = { { 2, 5, 4, 0 }, { 6, 5, 4, 0 }, { 0, 3, 1, 0 }, { 2, 3, 4, 0 } },
+    [STAGE_3S_DUDLEY] = { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_3S_NECRO] = { { 5, 7, 1, 0 }, { 6, 5, 1, 0 }, { 4, 7, 3, 0 }, { 2, 7, 6, 0 } },
+    [STAGE_3S_HUGO] = { { 2, 0, 5, 0 }, { 5, 7, 1, 0 }, { 3, 0, 1, 0 }, { 0, 7, 1, 0 } },
+    [STAGE_3S_IBUKI] = { { 0, 7, 6, 0 }, { 2, 5, 1, 0 }, { 5, 0, 1, 0 }, { 4, 5, 0, 0 } },
+    [STAGE_3S_ELENA] = { { 6, 4, 1, 0 }, { 6, 7, 3, 0 }, { 0, 5, 2, 0 }, { 6, 5, 1, 0 } },
+    [STAGE_3S_ORO] = { { 4, 5, 0, 0 }, { 6, 7, 1, 0 }, { 3, 0, 1, 0 }, { 6, 5, 0, 0 } },
+    [STAGE_3S_YANG] = { { 4, 5, 0, 0 }, { 3, 0, 1, 0 }, { 5, 0, 2, 0 }, { 4, 3, 2, 0 } },
+    [STAGE_3S_KEN] = { { 2, 0, 1, 0 }, { 6, 5, 3, 0 }, { 4, 0, 1, 0 }, { 3, 2, 5, 0 } },
+    [STAGE_3S_SEAN] = { { 5, 4, 1, 0 }, { 6, 0, 1, 0 }, { 0, 3, 2, 0 }, { 6, 0, 1, 0 } },
+    [STAGE_3S_URIEN] = { { 0, 7, 5, 0 }, { 6, 3, 0, 0 }, { 6, 3, 1, 0 }, { 3, 7, 2, 0 } },
+    [STAGE_3S_AKUMA] = { { 0, 2, 1, 0 }, { 3, 7, 6, 0 }, { 5, 2, 0, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_3S_SHIN_AKUMA] = { { 0, 2, 1, 0 }, { 3, 7, 6, 0 }, { 5, 2, 0, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_3S_CHUNLI] = { { 4, 5, 0, 0 }, { 3, 0, 1, 0 }, { 5, 0, 2, 0 }, { 4, 3, 2, 0 } },
+    [STAGE_3S_MAKOTO] = { { 0, 7, 6, 0 }, { 2, 5, 1, 0 }, { 5, 0, 1, 0 }, { 4, 5, 0, 0 } },
+    [STAGE_3S_Q] = { { 5, 0, 1, 0 }, { 6, 5, 1, 0 }, { 4, 2, 3, 0 }, { 7, 7, 7, 0 } },
+    [STAGE_3S_TWELVE] = { { 5, 7, 1, 0 }, { 6, 5, 1, 0 }, { 4, 7, 3, 0 }, { 2, 7, 6, 0 } },
+    [STAGE_3S_REMY] = { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_3S_BONUS_CAR] = { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_3S_BONUS_BALLS] = { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_NG_GILL] = { { 6, 7, 3, 0 }, { 6, 5, 1, 0 }, { 6, 0, 5, 0 }, { 4, 7, 1, 0 } },
+    [STAGE_NG_ALEX] = { { 6, 5, 1, 0 }, { 2, 7, 6, 0 }, { 3, 0, 1, 0 }, { 5, 4, 0, 0 } },
+    [STAGE_NG_RYU] = { { 5, 0, 1, 0 }, { 2, 5, 1, 0 }, { 3, 5, 4, 0 }, { 2, 4, 5, 0 } },
+    [STAGE_NG_YUN] = { { 2, 5, 4, 0 }, { 6, 5, 4, 0 }, { 0, 3, 1, 0 }, { 2, 3, 4, 0 } },
+    [STAGE_NG_DUDLEY] = { { 3, 0, 2, 0 }, { 4, 5, 0, 0 }, { 0, 2, 1, 0 }, { 0, 4, 1, 0 } },
+    [STAGE_NG_NECRO] = { { 5, 7, 1, 0 }, { 6, 5, 1, 0 }, { 4, 7, 3, 0 }, { 2, 7, 6, 0 } },
+    [STAGE_NG_IBUKI] = { { 0, 7, 6, 0 }, { 2, 5, 1, 0 }, { 5, 0, 1, 0 }, { 4, 5, 0, 0 } },
+    [STAGE_NG_ELENA] = { { 6, 4, 1, 0 }, { 6, 7, 3, 0 }, { 0, 5, 2, 0 }, { 6, 5, 1, 0 } },
+    [STAGE_NG_ORO] = { { 4, 5, 0, 0 }, { 6, 7, 1, 0 }, { 3, 0, 1, 0 }, { 6, 5, 0, 0 } },
+    [STAGE_NG_YANG] = { { 4, 5, 0, 0 }, { 3, 0, 1, 0 }, { 5, 0, 2, 0 }, { 4, 3, 2, 0 } },
+    [STAGE_NG_KEN] = { { 2, 0, 1, 0 }, { 6, 5, 3, 0 }, { 4, 0, 1, 0 }, { 3, 2, 5, 0 } },
+    [STAGE_NG_SEAN] = { { 5, 4, 1, 0 }, { 6, 0, 1, 0 }, { 0, 3, 2, 0 }, { 6, 0, 1, 0 } },
+};

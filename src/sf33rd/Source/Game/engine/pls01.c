@@ -94,7 +94,7 @@ void set_rl_waza(PLW* wk) { // 🟢
     WORK* em;
     s16 result;
 
-    if (Bonus_Game_Flag == 20) {
+    if (Bonus_Game_Flag == STAGE_3S_BONUS_CAR) {
         if (wk->wu.operator != 0) {
             if (wk->wu.xyz[0].disp.pos < bs2_hosei[0] || wk->wu.xyz[0].disp.pos > bs2_hosei[1]) {
                 goto end;
@@ -128,7 +128,7 @@ end:
 s16 check_rl_on_car(PLW* wk) { // 🟢
     s16 rnum;
 
-    if (Bonus_Game_Flag != 20) {
+    if (Bonus_Game_Flag != STAGE_3S_BONUS_CAR) {
         return 0;
     }
 
@@ -177,7 +177,7 @@ s32 saishin_bs2_area_car(PLW* wk) { // 🟡
 
     if (ArcadeBalance_IsEnabled()) {
         if (!wk->bs2_over_car) {
-            return 0;
+            return 1;
         }
     }
 
@@ -335,7 +335,7 @@ s16 check_F_R_dash(PLW* wk) { // 🟢
     s16 num;
     s16 rnum;
 
-    if (Bonus_Game_Flag != 20 || !wk->bs2_on_car) {
+    if (Bonus_Game_Flag != STAGE_3S_BONUS_CAR || !wk->bs2_on_car) {
         if (wk->wu.xyz[1].disp.pos > 0) {
             return 0;
         }
@@ -534,7 +534,7 @@ s32 check_turn_to_back(PLW* wk) { // 🟢
         return 0;
     }
 
-    if (Bonus_Game_Flag == 20) {
+    if (Bonus_Game_Flag == STAGE_3S_BONUS_CAR) {
         if (check_rl_flag(&wk->wu)) {
             return 0;
         }
@@ -619,7 +619,7 @@ s32 check_stand_up(PLW* wk) { // 🟢
 }
 
 s32 check_defense_lever(PLW* wk) { // 🟢
-    if (wk->spmv_ng_flag & DIP_GUARD_DISABLED) {
+    if (!ArcadeBalance_IsEnabled() && (wk->spmv_ng_flag & DIP_GUARD_DISABLED)) {
         return 0;
     }
 
@@ -752,7 +752,7 @@ void jumping_union_process(WORK* wk, s16 num) { // 🟢
     cal_mvxy_speed(wk);
     char_move(wk);
 
-    if ((Bonus_Game_Flag == 20) && (wk->operator != 0) && (saishin_bs2_area_car((PLW*)wk) == 0)) {
+    if ((Bonus_Game_Flag == STAGE_3S_BONUS_CAR) && (wk->operator != 0) && (saishin_bs2_area_car((PLW*)wk) == 0)) {
         if (wk->xyz[1].disp.pos + wk->cg_jphos <= bs2_floor[2]) {
             wk->position_y = wk->xyz[1].disp.pos = bs2_floor[2];
             wk->mvxy.a[1].sp = 0;

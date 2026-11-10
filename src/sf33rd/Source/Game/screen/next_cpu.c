@@ -29,6 +29,7 @@
 #include "sf33rd/Source/Game/io/gd3rd.h"
 #include "sf33rd/Source/Game/rendering/mmtmcnt.h"
 #include "sf33rd/Source/Game/screen/sel_data.h"
+#include "sf33rd/Source/Game/screen/sel_pl.h"
 #include "sf33rd/Source/Game/sound/se.h"
 #include "sf33rd/Source/Game/sound/sound3rd.h"
 #include "sf33rd/Source/Game/stage/bg.h"
@@ -458,7 +459,7 @@ static bool is_load_complete() {
         return false;
     }
 
-    if (!Check_LDREQ_Queue_BG(bg_w.stage)) {
+    if (!Check_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area])) {
         return false;
     }
 
@@ -748,7 +749,7 @@ void Select_CPU_3rd() {
         Order[COM_id + 11] = 1;
         Order_Timer[COM_id + 11] = 1;
 
-        if (check_use_all_SA() == 0 && check_without_SA() == 0 && EM_id != 0) {
+        if (check_use_all_SA() == 0 && check_without_SA() == 0 && EM_id != CHAR_GILL) {
             effect_98_init(COM_id, COM_id + 0x28, Super_Arts[COM_id], 2);
             Order[COM_id + 40] = 1;
             Order_Timer[COM_id + 40] = 1;
@@ -895,7 +896,7 @@ void Next_Bonus_2nd() {
 void Next_Bonus_3rd() {
     switch (SC_No[1]) {
     case 0:
-        My_char[COM_id] = Bonus_Type;
+        My_char[COM_id] = CHAR_ARCADE_TO_3SX(Bonus_Type);
         Next_CPU_4th_0_Sub();
         break;
 
@@ -948,12 +949,12 @@ s16 Next_Q() {
 void Next_Q_1st() {
     After_Bonus_1st();
     Setup_ID();
-    EM_id = 17;
+    EM_id = CHAR_Q;
     Setup_Next_Fighter();
     Purge_mmtm_area(8);
     Purge_com_player_from_mm();
     Make_texcash_of_list(7);
-    Push_LDREQ_Queue_Player(COM_id, 17);
+    Push_LDREQ_Queue_Player(COM_id, CHAR_Q);
 }
 
 void Next_Q_2nd() {
@@ -1096,7 +1097,7 @@ void Sel_CPU_Sub(s16 PL_id, u16 sw, u16 /* unused */) {
 }
 
 void Setup_EM_List() {
-    if (My_char[Player_id] == 0) {
+    if (My_char[Player_id] == CHAR_GILL) {
         EM_Candidate[Player_id][0][9] = 1;
         EM_Candidate[Player_id][1][9] = 1;
     } else {
@@ -1113,15 +1114,17 @@ void Setup_Next_Fighter() {
     paring_bonus_r[COM_id] = 0;
     My_char[COM_id] = EM_id;
 
-    if (EM_id == 17) {
+    if (EM_id == CHAR_Q) {
         Battle_Country = Q_Country;
         bg_w.stage = Q_Country;
     } else {
-        Battle_Country = EM_id;
+        Battle_Country = STAGE_OF_CHAR(EM_id);
 
-        if (My_char[Player_id] == 0 && EM_id == 1) {
-            Battle_Country = 0;
+        if (My_char[Player_id] == CHAR_GILL && EM_id == CHAR_ALEX) {
+            Battle_Country = STAGE_3S_GILL;
         }
+
+        Battle_Country = Resolve_Akuma_Stage(Battle_Country);
 
         bg_w.stage = Battle_Country;
     }
@@ -1132,8 +1135,8 @@ void Setup_Next_Fighter() {
     }
 #endif
 
-    Push_LDREQ_Queue_BG(bg_w.stage);
     bg_w.area = 0;
+    Push_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area]);
     Super_Arts[COM_id] = Stock_Com_Arts[Player_id] = Setup_Com_Arts();
 
 #if DEBUG
@@ -1149,7 +1152,7 @@ void Setup_Next_Fighter() {
 const u8 Arts_Rnd_Data[8] = { 0, 0, 0, 1, 1, 1, 2, 2 };
 
 s8 Setup_Com_Arts() {
-    if (EM_id == 0) {
+    if (EM_id == CHAR_GILL) {
         return 1;
     }
 
@@ -1481,8 +1484,8 @@ s8 Check_Bonus_Stage() {
     bg_w.stage = Bonus_Type;
     bg_w.area = 0;
 
-    if (Bonus_Type == 21) {
-        My_char[COM_id] = 0xC;
+    if (Bonus_Type == STAGE_3S_BONUS_BALLS) {
+        My_char[COM_id] = CHAR_SEAN;
     } else {
         My_char[COM_id] = My_char[Player_id];
     }
@@ -1490,8 +1493,8 @@ s8 Check_Bonus_Stage() {
     Setup_Com_Color();
     Setup_PL_Color(COM_id, Com_Color_Shot);
     Push_LDREQ_Queue_Player(COM_id, My_char[COM_id]);
-    Push_LDREQ_Queue_BG(Bonus_Type);
-    return Completion_Bonus[Player_id][Bonus_Type - 20] = 1;
+    Push_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area]);
+    return Completion_Bonus[Player_id][Bonus_Type - STAGE_3S_BONUS_CAR] = 1;
 }
 
 s8 Check_Bonus_Type() {
@@ -1499,12 +1502,12 @@ s8 Check_Bonus_Type() {
     if (debug_config.bonus_stage_override != 0) {
         if (debug_config.bonus_stage_override == 1) {
             Completion_Bonus[Player_id][0] = 0;
-            return 20;
+            return STAGE_3S_BONUS_CAR;
         }
 
         if (debug_config.bonus_stage_override == 2) {
             Completion_Bonus[Player_id][1] = 0;
-            return 21;
+            return STAGE_3S_BONUS_BALLS;
         }
 
         return 0;
@@ -1520,7 +1523,7 @@ s8 Check_Bonus_Type() {
             return 0;
         }
 
-        return 21;
+        return STAGE_3S_BONUS_BALLS;
     }
 
     if (VS_Index[Player_id] >= 3) {
@@ -1528,7 +1531,7 @@ s8 Check_Bonus_Type() {
             return 0;
         }
 
-        return 20;
+        return STAGE_3S_BONUS_CAR;
     }
 
     return 0;

@@ -306,11 +306,11 @@ s32 check_ball_mizushibuki(s16 xx, s16 yy) {
     s16 iy;
     u16 ans;
 
-    if (bg_w.stage == 10) {
+    if (bg_w.stage == STAGE_3S_YANG) {
         return 2;
     }
 
-    if (Bonus_Game_Flag != 21) {
+    if (Bonus_Game_Flag != STAGE_3S_BONUS_BALLS) {
         return 0;
     }
 

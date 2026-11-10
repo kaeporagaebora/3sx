@@ -224,9 +224,9 @@ void Disp_Personal_Count(s16 PL_id, s8 counter) {
 
 void Setup_Play_Type() {
     if (Operator_Status[0] & 0x7F && Operator_Status[1] & 0x7F) {
-        Play_Type = 1;
+        Play_Type = PLAY_TYPE_PLAYER_VS_PLAYER;
     } else {
-        Play_Type = 0;
+        Play_Type = PLAY_TYPE_PLAYER_VS_CPU;
     }
 }
 
@@ -328,7 +328,7 @@ void Disp_Win_Record() {
 
     switch (Mode_Type) {
     case MODE_ARCADE:
-        if (Play_Type == 1) {
+        if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
             if (Win_Record[0] != 0 || Win_Record[1] != 0) {
                 if (Win_Record[0]) {
                     PL_id = 0;
@@ -433,7 +433,7 @@ s32 Button_Cut_EX(s16* Timer, s16 Limit_Time) {
 }
 
 s32 Setup_Target_PL() {
-    if (Play_Type == 1) {
+    if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
         return Winner_id;
     }
 
@@ -900,7 +900,7 @@ static bool bg_layer_disabled(int i) {
     }
 
     // Rain on Yang's stage
-    if ((bg_w.bg_index == 10) && (i == 1)) {
+    if ((bg_w.bg_index == AREA_3S_YANG) && (i == 1)) {
         return true;
     }
 
@@ -1675,7 +1675,7 @@ void Initialize_EM_Candidate(s16 PL_id) {
     EM_Candidate[PL_id][0][8] = Middle_Class_Boss_Data[My_char[PL_id]];
     EM_Candidate[PL_id][1][8] = Middle_Class_Boss_Data[My_char[PL_id]];
 
-    if (My_char[PL_id] != 0) {
+    if (My_char[PL_id] != CHAR_GILL) {
         EM_Candidate[PL_id][0][9] = 0;
         EM_Candidate[PL_id][1][9] = 0;
     } else {
@@ -1685,12 +1685,10 @@ void Initialize_EM_Candidate(s16 PL_id) {
 }
 
 void Setup_Candidate_Buff(s16 PL_id) {
-    s16 em;
-    s16 ix;
-    s16 s2;
+    s16 em = 0;
 
-    for (em = 0, s2 = ix = 1; ix <= 19; ix++) {
-        if (My_char[PL_id] == 0 && ix == 1) {
+    for (Character ix = CHAR_ALEX; ix < CHAR_COUNT; ix++) {
+        if (My_char[PL_id] == CHAR_GILL && ix == CHAR_ALEX) {
             continue;
         }
 
@@ -1698,7 +1696,7 @@ void Setup_Candidate_Buff(s16 PL_id) {
             continue;
         }
 
-        if (ix == 17) {
+        if (ix == CHAR_Q) {
             continue;
         }
 
@@ -1711,9 +1709,9 @@ void Setup_Candidate_Buff(s16 PL_id) {
         }
 
         Candidate_Buff[em] = ix;
-        em++;
+        em += 1;
 
-        if (em >= 16) {
+        if (em >= SDL_arraysize(Candidate_Buff)) {
             break;
         }
     }

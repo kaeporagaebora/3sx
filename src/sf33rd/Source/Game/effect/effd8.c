@@ -32,8 +32,7 @@ void effect_D8_move(WORK_Other* ewk) {
 
     switch (ewk->wu.routine_no[0]) {
     case 0:
-        if (((Mode_Type == MODE_NORMAL_TRAINING) || (Mode_Type == MODE_PARRY_TRAINING)) &&
-            (ewk->master_id == New_Challenger) && (S_No[3] < 2)) {
+        if (Sel_PL_Is_Sequential() && (ewk->master_id != Sel_PL_Lead_ID()) && (S_No[3] < 2)) {
             return;
         }
 
@@ -58,7 +57,7 @@ void effect_D8_move(WORK_Other* ewk) {
             ewk->wu.vital_new = Cursor_X[ewk->master_id];
             ewk->wu.vital_old = Cursor_Y[ewk->master_id];
 
-            if (Play_Type == 1) {
+            if (Play_Type == PLAY_TYPE_PLAYER_VS_PLAYER) {
                 offset_x = Setup_Face_Offset_X(99);
             } else {
                 offset_x = Setup_Face_Offset_X(Play_Type_1st);

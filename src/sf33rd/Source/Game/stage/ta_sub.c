@@ -96,6 +96,14 @@ s32 range_x_check(WORK_Other* ewk) {
     return 1;
 }
 
+s32 range_x_check_ng(WORK_Other* ewk) {
+    const BGW* bgw = &bg_w.bgw[ewk->wu.my_family - 1];
+    const s16 pos_x_work = (bg_w.chase_flag & 0xF) ? bgw->chase_xy[0].disp.pos : bgw->wxy[0].disp.pos;
+    const s16 x = ewk->wu.xyz[0].disp.pos;
+
+    return x >= pos_x_work - 272 && x <= pos_x_work + 272;
+}
+
 s32 range_x_check3(WORK_Other* ewk, s16 optional_range) {
     s16 pos_x_work;
     s16 work2;
@@ -162,6 +170,16 @@ void add_y_sub2(WORK* wk) {
     wk->mvxy.a[1].sp += wk->mvxy.d[1].sp;
 }
 
+void add_x_sub_ng(WORK* wk) {
+    wk->mvxy.a[0].sp += wk->mvxy.d[0].sp;
+    wk->xyz[0].cal += wk->mvxy.a[0].sp;
+}
+
+void add_y_sub_ng(WORK* wk) {
+    wk->mvxy.a[1].sp += wk->mvxy.d[1].sp;
+    wk->xyz[1].cal += wk->mvxy.a[1].sp;
+}
+
 s32 obr_no_disp_check() {
     if (aku_flag | akebono_flag | sa_pa_flag | seraph_flag) {
         return 1;
@@ -222,6 +240,33 @@ void disp_pos_trans_entry_rs(WORK_Other* ewk) {
     }
 }
 
+void disp_pos_trans_entry_ng(WORK_Other* ewk) {
+    if (obr_no_disp_check() || !range_x_check_ng(ewk)) {
+        return;
+    }
+
+    ewk->wu.position_x = ewk->wu.xyz[0].disp.pos & 0x3FF;
+    ewk->wu.position_y = ewk->wu.xyz[1].disp.pos & 0x3FF;
+    sort_push_request4(&ewk->wu);
+}
+
+void disp_pos_trans_entry_s_ng(WORK_Other* ewk) {
+    if (obr_no_disp_check()) {
+        return;
+    }
+
+    suzi_sync_pos_set(ewk);
+    sort_push_request4(&ewk->wu);
+}
+
+void disp_pos_trans_entry_rs_ng(WORK_Other* ewk) {
+    if (!range_x_check_ng(ewk)) {
+        return;
+    }
+
+    disp_pos_trans_entry_s_ng(ewk);
+}
+
 void pl_eff_trans_entry(WORK_Other* ewk) {
     if (obr_no_disp_check() == 0) {
         ewk->wu.position_x = ewk->wu.xyz[0].disp.pos & 0xFFFF;
@@ -280,6 +325,40 @@ s32 eff_hit_check_sub(WORK_Other* ewk, PLW* pl) {
     }
 
     return 0;
+}
+
+static s32 eff_hit_check_box_sub(WORK_Other* ewk, PLW* pl, const s16* box) {
+    if (pl->wu.routine_no[1] != 1 || pl->wu.routine_no[2] < 14 || pl->wu.routine_no[2] >= 24) {
+        return 0;
+    }
+
+    return hit_check_subroutine(&pl->wu, &ewk->wu, pl_hit_eff[pl->player_number], box) != 0;
+}
+
+s16 eff_hit_check_box(WORK_Other* ewk, s16 type, const s16* box) {
+    if (!EXE_obroll && (!type || pcon_dp_flag)) {
+        eff_hit_flag[ewk->wu.type] += eff_hit_check_box_sub(ewk, &plw[0], box);
+        eff_hit_flag[ewk->wu.type] += eff_hit_check_box_sub(ewk, &plw[1], box);
+    }
+
+    return eff_hit_flag[ewk->wu.type];
+}
+
+static const s16 ng_eff_hit_data[11][4] = { { -159, 48, 65, 93 }, { 90, 63, 98, 45 },   { 5, 61, 41, 40 },
+                                            { -117, 87, 19, 42 }, { -135, 25, 18, 37 }, { 33, 81, 58, 44 },
+                                            { -53, 39, 20, 25 },  { 6, 64, 33, 69 },    { 12, 61, 16, 28 },
+                                            { -28, 17, 21, 36 },  { -28, 17, 21, 36 } };
+
+s16 eff_hit_check_ng(WORK_Other* ewk, s16 type) {
+    if (ewk->wu.type == 5) {
+        return 0;
+    }
+
+    return eff_hit_check_box(ewk, type, ng_eff_hit_data[ewk->wu.type]);
+}
+
+s16 eff_hit_check_area(WORK_Other* ewk, s16 type) {
+    return AREA_IS_NG(bg_w.bg_index) ? eff_hit_check_ng(ewk, type) : eff_hit_check(ewk, type);
 }
 
 s16 eff_hit_check2(WORK_Other* ewk, s16 type, s16 where_type) {
@@ -362,16 +441,36 @@ void eff_hit_flag_clear() {
     }
 }
 
-s32 compel_dead_check(WORK_Other* ewk) {
-    s32 var_s0 = 0;
+bool is_round_over() {
+    return !Allow_a_battle_f && Conclusion_Flag == 1 && C_No[0] > 1;
+}
 
-    if (bg_w.compel_flag) {
-        if (ewk->wu.dead_f) {
-            var_s0 = 1;
+bool is_round_won() {
+    return is_round_over() && Complete_Victory;
+}
+
+bool is_special_move_active() {
+    for (int i = 0; i < 2; i++) {
+        if (plw[i].wu.routine_no[1] == 4 && plw[i].wu.routine_no[2] > 15) {
+            return true;
         }
     }
 
-    return var_s0;
+    return false;
+}
+
+bool is_near(s16 a, s16 b, s16 range) {
+    s16 distance = a - b;
+
+    if (distance < 0) {
+        distance = -distance;
+    }
+
+    return distance < range;
+}
+
+s32 compel_dead_check(WORK_Other* ewk) {
+    return bg_w.compel_flag && ewk->wu.dead_f;
 }
 
 void win_lose_work_clear() {

@@ -210,6 +210,46 @@
 #include "sf33rd/Source/Game/effect/effm6.h"
 #include "sf33rd/Source/Game/effect/effm7.h"
 #include "sf33rd/Source/Game/effect/effm8.h"
+#include "sf33rd/Source/Game/effect/ng/eff07.h"
+#include "sf33rd/Source/Game/effect/ng/eff09.h"
+#include "sf33rd/Source/Game/effect/ng/eff124.h"
+#include "sf33rd/Source/Game/effect/ng/eff18.h"
+#include "sf33rd/Source/Game/effect/ng/eff19.h"
+#include "sf33rd/Source/Game/effect/ng/eff20.h"
+#include "sf33rd/Source/Game/effect/ng/eff23.h"
+#include "sf33rd/Source/Game/effect/ng/eff28.h"
+#include "sf33rd/Source/Game/effect/ng/eff29.h"
+#include "sf33rd/Source/Game/effect/ng/eff34.h"
+#include "sf33rd/Source/Game/effect/ng/eff44.h"
+#include "sf33rd/Source/Game/effect/ng/eff45.h"
+#include "sf33rd/Source/Game/effect/ng/eff47.h"
+#include "sf33rd/Source/Game/effect/ng/eff53.h"
+#include "sf33rd/Source/Game/effect/ng/eff54.h"
+#include "sf33rd/Source/Game/effect/ng/eff55.h"
+#include "sf33rd/Source/Game/effect/ng/eff56.h"
+#include "sf33rd/Source/Game/effect/ng/eff60.h"
+#include "sf33rd/Source/Game/effect/ng/eff61.h"
+#include "sf33rd/Source/Game/effect/ng/eff62.h"
+#include "sf33rd/Source/Game/effect/ng/eff64.h"
+#include "sf33rd/Source/Game/effect/ng/eff65.h"
+#include "sf33rd/Source/Game/effect/ng/eff66.h"
+#include "sf33rd/Source/Game/effect/ng/eff67.h"
+#include "sf33rd/Source/Game/effect/ng/eff68.h"
+#include "sf33rd/Source/Game/effect/ng/eff69.h"
+#include "sf33rd/Source/Game/effect/ng/eff71.h"
+#include "sf33rd/Source/Game/effect/ng/eff72.h"
+#include "sf33rd/Source/Game/effect/ng/eff73.h"
+#include "sf33rd/Source/Game/effect/ng/eff74.h"
+#include "sf33rd/Source/Game/effect/ng/eff82.h"
+#include "sf33rd/Source/Game/effect/ng/eff83.h"
+#include "sf33rd/Source/Game/effect/ng/eff85.h"
+#include "sf33rd/Source/Game/effect/ng/eff86.h"
+#include "sf33rd/Source/Game/effect/ng/eff87.h"
+#include "sf33rd/Source/Game/effect/ng/eff88.h"
+#include "sf33rd/Source/Game/effect/ng/eff94.h"
+#include "sf33rd/Source/Game/effect/ng/effc1.h"
+#include "sf33rd/Source/Game/effect/ng/effc2.h"
+#include "sf33rd/Source/Game/effect/ng/effc3.h"
 #include "sf33rd/Source/Game/engine/plpat09.h"
 
 s32 effect_dummy_init() {
@@ -220,7 +260,7 @@ void effect_dummy_move(WORK_Other* /* unused */) {
     // Do nothing
 }
 
-EffectMoveCallback const effmovejptbl[229] = {
+EffectMoveCallback const effmovejptbl[279] = {
     (EffectMoveCallback)effect_00_move,
     effect_01_move,
     effect_02_move,
@@ -450,9 +490,61 @@ EffectMoveCallback const effmovejptbl[229] = {
     effect_M6_move,
     effect_M7_move,
     effect_M8_move,
+
+    // New Generation
+    [EFFECT_NG07_ID] = effect_ng07_move,
+    [EFFECT_NG08_ID] = effect_ng08_move,
+    [EFFECT_NG09_ID] = effect_ng09_move,
+    [EFFECT_NG18_ID] = effect_ng18_move,
+    [EFFECT_NG19_ID] = effect_ng19_move,
+    [EFFECT_NG20_ID] = effect_ng20_move,
+    [EFFECT_NG21_ID] = effect_ng21_move,
+    [EFFECT_NG22_ID] = effect_ng22_move,
+    [EFFECT_NG23_ID] = effect_ng23_move,
+    [EFFECT_NG24_ID] = effect_ng24_move,
+    [EFFECT_NG28_ID] = effect_ng28_move,
+    [EFFECT_NG29_ID] = effect_ng29_move,
+    [EFFECT_NG34_ID] = effect_ng34_move,
+    [EFFECT_NG35_ID] = effect_ng35_move,
+    [EFFECT_NG44_ID] = effect_ng44_move,
+    [EFFECT_NG45_ID] = effect_ng45_move,
+    [EFFECT_NG47_ID] = effect_ng47_move,
+    [EFFECT_NG53_ID] = effect_ng53_move,
+    [EFFECT_NG54_ID] = effect_ng54_move,
+    [EFFECT_NG55_ID] = effect_ng55_move,
+    [EFFECT_NG56_ID] = effect_ng56_move,
+    [EFFECT_NG60_ID] = effect_ng60_move,
+    [EFFECT_NG61_ID] = effect_ng61_move,
+    [EFFECT_NG62_ID] = effect_ng62_move,
+    [EFFECT_NG64_ID] = effect_ng64_move,
+    [EFFECT_NG65_ID] = effect_ng65_move,
+    [EFFECT_NG66_ID] = effect_ng66_move,
+    [EFFECT_NG67_ID] = effect_ng67_move,
+    [EFFECT_NG68_ID] = effect_ng68_move,
+    [EFFECT_NG69_ID] = effect_ng69_move,
+    [EFFECT_NG70_ID] = effect_ng70_move,
+    [EFFECT_NG71_ID] = effect_ng71_move,
+    [EFFECT_NG72_ID] = effect_ng72_move,
+    [EFFECT_NG73_ID] = effect_ng73_move,
+    [EFFECT_NG74_ID] = effect_ng74_move,
+    [EFFECT_NG77_ID] = effect_ng77_move,
+    [EFFECT_NG78_ID] = effect_ng78_move,
+    [EFFECT_NG79_ID] = effect_ng79_move,
+    [EFFECT_NG80_ID] = effect_ng80_move,
+    [EFFECT_NG82_ID] = effect_ng82_move,
+    [EFFECT_NG83_ID] = effect_ng83_move,
+    [EFFECT_NG85_ID] = effect_ng85_move,
+    [EFFECT_NG86_ID] = effect_ng86_move,
+    [EFFECT_NG87_ID] = effect_05_move,
+    [EFFECT_NG88_ID] = effect_06_move,
+    [EFFECT_NG94_ID] = effect_ng94_move,
+    [EFFECT_NGC1_ID] = effect_ngc1_move,
+    [EFFECT_NGC2_ID] = effect_ngc2_move,
+    [EFFECT_NGC3_ID] = effect_ngc3_move,
+    [EFFECT_NG124_ID] = effect_ng124_move,
 };
 
-EffectInitCallback const effinitjptbl[59] = {
+EffectInitCallback const effinitjptbl[61] = {
     NULL,
     effect_03_init,
     effect_13_init,
@@ -512,4 +604,8 @@ EffectInitCallback const effinitjptbl[59] = {
     effect_M2_init,
     effect_M8_init,
     (EffectInitCallback)effect_F0_init,
+
+    // New Generation
+    [EFFINIT_NG09] = effect_ng09_init,
+    [EFFINIT_NG54] = effect_ng54_init,
 };

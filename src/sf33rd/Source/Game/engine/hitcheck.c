@@ -937,7 +937,7 @@ void hit_pattern_extdat_check(WORK* as) { // 🟡
                 if (!(((PLW*)as)->spmv_ng_flag2 & DIP2_GROUND_CHAIN_COMBO_DISABLED)) {
                     i = 0;
 
-                    if (((PLW*)as)->player_number == 4) {
+                    if (((PLW*)as)->player_number == CHAR_DUDLEY) {
                         as->cg_meoshi = chain_hidou_nm_ground_table[as->kow & 7];
                         as->cg_cancel |= 8;
                     } else {
@@ -952,7 +952,7 @@ void hit_pattern_extdat_check(WORK* as) { // 🟡
                 if (!(((PLW*)as)->spmv_ng_flag2 & DIP2_AIR_CHAIN_COMBO_DISABLED) && !hikusugi_check(as)) {
                     i = 0;
 
-                    if (((PLW*)as)->player_number == 7) {
+                    if (((PLW*)as)->player_number == CHAR_IBUKI) {
                         as->cg_meoshi = chain_hidou_nm_air_table[as->kow & 7];
                         as->cg_cancel |= 8;
                     } else {
@@ -1151,69 +1151,13 @@ void same_dm_stop(WORK* as, WORK* ds) { // 🟢
     }
 }
 
-s32 defense_sky_cps3(PLW* as, PLW* ds, s8 gddir) { // 🟢
-    if (ds->py->flag == 0 && !(ds->guard_flag & 2) && as->wu.att.guard & 4) {
-        if (!(ds->spmv_ng_flag & DIP_AIR_PARRY_DISABLED) && ds->cp->waza_flag[5] != 0) {
-            blocking_point_count_up(ds);
-            as->wu.hf.hit.player = 0x80;
-            ds->wu.routine_no[2] = 0x22;
-
-            if (check_dm_att_blocking(&as->wu, &ds->wu, 7)) {
-                return 2;
-            }
-
-            return 0;
-        }
-
-        if (!(ds->spmv_ng_flag & DIP_ANTI_AIR_PARRY_DISABLED) && ds->cp->waza_flag[6] != 0) {
-            blocking_point_count_up(ds);
-            as->wu.hf.hit.player = 0x80;
-            ds->wu.routine_no[2] = 0x23;
-
-            if (check_dm_att_blocking(&as->wu, &ds->wu, 7)) {
-                return 2;
-            }
-
-            return 0;
-        }
-    }
-
-    if (!(as->wu.att.guard & 0x20)) {
-        return 2;
-    }
-
-    if (ds->guard_flag & 1) {
-        return 2;
-    }
-
-    if (ds->spmv_ng_flag & DIP_AIR_GUARD_DISABLED) {
-        return 2;
-    }
-
-    if (!(gddir & ds->saishin_lvdir)) {
-        return 2;
-    }
-
-    as->wu.hf.hit.player = 0x20;
-    ds->wu.routine_no[2] = 7;
-
-    if (check_dm_att_guard(&as->wu, &ds->wu, 2)) {
-        return 2;
-    }
-
-    return 1;
-}
-
-s32 defense_sky_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
+s32 defense_sky(PLW* as, PLW* ds, s8 gddir) { // 🟡
     s8 just_now;
     s8 attr_att;
-    s8 abs;
-    s8 ags;
+    const s8 abs = (ds->spmv_ng_flag & DIP_AUTO_PARRY_DISABLED) == 0;
+    const s8 ags = (ds->spmv_ng_flag & DIP_AUTO_GUARD_DISABLED) == 0;
 
-    abs = (ds->spmv_ng_flag & DIP_AUTO_PARRY_DISABLED) == 0;
-    ags = (ds->spmv_ng_flag & DIP_AUTO_GUARD_DISABLED) == 0;
-
-    if (ds->dead_flag) {
+    if (!ArcadeBalance_IsEnabled() && ds->dead_flag) {
         ds->guard_flag = 3;
     }
 
@@ -1225,7 +1169,32 @@ s32 defense_sky_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
     }
 
     if (ds->py->flag == 0 && !(ds->guard_flag & 2) && as->wu.att.guard & 4) {
-        if (just_now) {
+        if (ArcadeBalance_IsEnabled()) {
+            // CPS3 has no air red parry and checks the anti-air parry input as a second air parry.
+            if (!(ds->spmv_ng_flag & DIP_AIR_PARRY_DISABLED) && (ds->cp->waza_flag[5] != 0 || abs)) {
+                blocking_point_count_up(ds);
+                as->wu.hf.hit.player = 0x80;
+                ds->wu.routine_no[2] = 0x22;
+
+                if (check_dm_att_blocking(&as->wu, &ds->wu, 7)) {
+                    return 2;
+                }
+
+                return 0;
+            }
+
+            if (!(ds->spmv_ng_flag & DIP_ANTI_AIR_PARRY_DISABLED) && (ds->cp->waza_flag[6] != 0 || abs)) {
+                blocking_point_count_up(ds);
+                as->wu.hf.hit.player = 0x80;
+                ds->wu.routine_no[2] = 0x23;
+
+                if (check_dm_att_blocking(&as->wu, &ds->wu, 7)) {
+                    return 2;
+                }
+
+                return 0;
+            }
+        } else if (just_now) {
             if (!(ds->spmv_ng_flag & DIP_RED_PARRY_DISABLED) &&
                 (ds->cp->waza_flag[5] >= grdb2[ds->wu.id][attr_att] || abs)) {
                 blocking_point_count_up(ds);
@@ -1267,6 +1236,8 @@ s32 defense_sky_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
         return 2;
     }
 
+    // CPS3 only checks the lever direction here, but it never enables air guard, and neither does the default
+    // system direction.
     if (!ds->auto_guard && !ags) {
         if ((ds->spmv_ng_flag & DIP_ABSOLUTE_GUARD_DISABLED) || !just_now) {
             if (!(ds->saishin_lvdir & gddir)) {
@@ -1288,15 +1259,6 @@ s32 defense_sky_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
     return 1;
 }
 
-s32 defense_sky(PLW* as, PLW* ds, s8 gddir) { // 🟡
-    // CPS3 lacks the local red-parry/auto-guard extensions and has a second air-parry branch.
-    if (ArcadeBalance_IsEnabled()) {
-        return defense_sky_cps3(as, ds, gddir);
-    } else {
-        return defense_sky_ps2(as, ds, gddir);
-    }
-}
-
 void blocking_point_count_up(PLW* wk) { // 🟡
     // CPS3 always scores parries; local's default DIP disables auto-parry, so this only differs when auto-parry is
     // enabled.
@@ -1315,168 +1277,13 @@ void blocking_point_count_up(PLW* wk) { // 🟡
     }
 }
 
-s32 defense_ground_cps3(PLW* as, PLW* ds, s8 gddir) { // 🟢
-    s8 just_now = 0;
-    s8 attr_att = 0;
-
-    if (ds->guard_chuu != 0 && ds->guard_chuu < 5) {
-        just_now = 1;
-        attr_att = check_normal_attack(as->wu.kind_of_waza);
-    }
-
-    if (ds->py->flag == 0 && !(ds->guard_flag & 2) && as->wu.att.guard & 3) {
-        if ((as->wu.att.guard & 2) && !(ds->spmv_ng_flag & DIP_UNKNOWN_8)) {
-            if (just_now) {
-                if (ds->cp->waza_flag[3] >= grdb[ds->wu.id][attr_att][0]) {
-                    blocking_point_count_up(ds);
-                    as->wu.hf.hit.player = 0x40;
-
-                    if (check_attbox_dir(ds) == 0) {
-                        ds->wu.routine_no[2] = 0x1F;
-                    } else {
-                        ds->wu.routine_no[2] = 0x20;
-                    }
-
-                    if (check_dm_att_blocking(&as->wu, &ds->wu, 5)) {
-                        return 2;
-                    }
-
-                    return 0;
-                }
-            } else if (as->wu.jump_att_flag == 0) {
-                if (ds->cp->waza_flag[3] != 0) {
-                    blocking_point_count_up(ds);
-                    as->wu.hf.hit.player = 0x40;
-
-                    if (check_attbox_dir(ds) == 0) {
-                        ds->wu.routine_no[2] = 0x1F;
-                    } else {
-                        ds->wu.routine_no[2] = 0x20;
-                    }
-
-                    if (check_dm_att_blocking(&as->wu, &ds->wu, 5)) {
-                        return 2;
-                    }
-
-                    return 0;
-                }
-            } else if (ds->cp->waza_flag[12] != 0) {
-                blocking_point_count_up(ds);
-                as->wu.hf.hit.player = 0x40;
-
-                if (check_attbox_dir(ds) == 0) {
-                    ds->wu.routine_no[2] = 0x1F;
-                } else {
-                    ds->wu.routine_no[2] = 0x20;
-                }
-
-                if (check_dm_att_blocking(&as->wu, &ds->wu, 5)) {
-                    return 2;
-                }
-
-                return 0;
-            }
-        }
-
-        if ((as->wu.att.guard & 1) && !(ds->spmv_ng_flag & DIP_UNKNOWN_9)) {
-            if (just_now) {
-                if (ds->cp->waza_flag[4] >= grdb[ds->wu.id][attr_att][1]) {
-                    blocking_point_count_up(ds);
-                    as->wu.hf.hit.player = 0x40;
-                    ds->wu.routine_no[2] = 0x21;
-
-                    if (check_dm_att_blocking(&as->wu, &ds->wu, 6)) {
-                        return 2;
-                    }
-
-                    return 0;
-                }
-            } else if (ds->cp->waza_flag[4] != 0) {
-                blocking_point_count_up(ds);
-                as->wu.hf.hit.player = 0x40;
-                ds->wu.routine_no[2] = 0x21;
-
-                if (check_dm_att_blocking(&as->wu, &ds->wu, 6)) {
-                    return 2;
-                }
-
-                return 0;
-            }
-        }
-    }
-
-    if (!(as->wu.att.guard & 0x18)) {
-        return 2;
-    }
-
-    if (ds->guard_flag & 1) {
-        return 2;
-    }
-
-    if (ds->spmv_ng_flag & DIP_GUARD_DISABLED) {
-        return 2;
-    }
-
-    if (!ds->auto_guard) {
-        if (!(ds->saishin_lvdir & gddir)) {
-            return 2;
-        }
-
-        if (ds->cp->sw_lvbt & 1) {
-            return 2;
-        }
-    }
-
-    switch (as->wu.att.guard & 0x18) {
-    case 8:
-        if (!(ds->cp->sw_lvbt & 2)) {
-            return 2;
-        }
-
-        ds->wu.routine_no[2] = 6;
-        break;
-
-    case 16:
-        if (ds->cp->sw_lvbt & 2) {
-            return 2;
-        }
-
-        ds->wu.routine_no[2] = 5;
-        break;
-
-    default:
-        if (ds->cp->sw_lvbt & 2) {
-            ds->wu.routine_no[2] = 6;
-            break;
-        }
-
-        ds->wu.routine_no[2] = 5;
-        break;
-    }
-
-    as->wu.hf.hit.player = 0x10;
-
-    if (ds->wu.routine_no[2] == 5 && check_attbox_dir(ds) == 0) {
-        ds->wu.routine_no[2] = 4;
-    }
-
-    if (check_dm_att_guard(&as->wu, &ds->wu, 1)) {
-        return 2;
-    }
-
-    return 1;
-}
-
-s32 defense_ground_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
+s32 defense_ground(PLW* as, PLW* ds, s8 gddir) { // 🟡
     s8 just_now;
     s8 attr_att;
-    s8 abs;
-    s8 ags;
+    const s8 abs = (ds->spmv_ng_flag & DIP_AUTO_PARRY_DISABLED) == 0;
+    const s8 ags = (ds->spmv_ng_flag & DIP_AUTO_GUARD_DISABLED) == 0;
 
-    abs = (ds->spmv_ng_flag & DIP_AUTO_PARRY_DISABLED) == 0;
-    ags = (ds->spmv_ng_flag & DIP_AUTO_GUARD_DISABLED) == 0;
-
-    if (ds->dead_flag) {
+    if (!ArcadeBalance_IsEnabled() && ds->dead_flag) {
         ds->guard_flag = 3;
     }
 
@@ -1507,9 +1314,11 @@ s32 defense_ground_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
 
                     return 0;
                 }
-            } else if (!(ds->spmv_ng_flag & DIP_UNKNOWN_8)) {
+            } else if (!(ds->spmv_ng_flag & DIP_HIGH_PARRY_DISABLED)) {
                 if (as->wu.jump_att_flag) {
-                    if (!(ds->spmv_ng_flag & DIP_ANTI_AIR_PARRY_DISABLED) && (ds->cp->waza_flag[12] != 0 || abs)) {
+                    // CPS3 doesn't apply the anti-air parry DIP to grounded parries.
+                    if ((ArcadeBalance_IsEnabled() || !(ds->spmv_ng_flag & DIP_ANTI_AIR_PARRY_DISABLED)) &&
+                        (ds->cp->waza_flag[12] != 0 || abs)) {
                         blocking_point_count_up(ds);
                         as->wu.hf.hit.player = 64;
 
@@ -1558,8 +1367,9 @@ s32 defense_ground_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
 
                     return 0;
                 }
-            } else if (!(ds->spmv_ng_flag & DIP_UNKNOWN_9)) {
-                if (as->wu.jump_att_flag) {
+            } else if (!(ds->spmv_ng_flag & DIP_LOW_PARRY_DISABLED)) {
+                // CPS3 parries jump attacks low with the regular low parry input.
+                if (as->wu.jump_att_flag && !ArcadeBalance_IsEnabled()) {
                     if (!(ds->spmv_ng_flag & DIP_ANTI_AIR_PARRY_DISABLED) && (ds->cp->waza_flag[4] != 0 || abs)) {
                         blocking_point_count_up(ds);
                         as->wu.hf.hit.player = 64;
@@ -1650,15 +1460,6 @@ s32 defense_ground_ps2(PLW* as, PLW* ds, s8 gddir) { // 🔴
     }
 
     return 1;
-}
-
-s32 defense_ground(PLW* as, PLW* ds, s8 gddir) { // 🟡
-    // CPS3 lacks the local red-parry/auto-guard extensions in the PS2 ground-defense path.
-    if (ArcadeBalance_IsEnabled()) {
-        return defense_ground_cps3(as, ds, gddir);
-    } else {
-        return defense_ground_ps2(as, ds, gddir);
-    }
 }
 
 void setup_dm_rl(WORK* as, WORK* ds) { // 🟢
@@ -2417,7 +2218,7 @@ const u8 ttk_damage_req_tbl[83] = { 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
                                     0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                     0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1 };
 
-const u8 parisucc_pts[2][40] = {
+const u8 parisucc_pts[PLAY_TYPE_COUNT][40] = {
     { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 26, 28, 30,  32,  34,  36,  38,
       40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 100, 100, 100, 100 },
     { 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,

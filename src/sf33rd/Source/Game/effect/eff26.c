@@ -9,6 +9,7 @@
 #include "sf33rd/Source/Game/effect/eff25.h"
 #include "sf33rd/Source/Game/effect/eff27.h"
 #include "sf33rd/Source/Game/effect/effect.h"
+#include "sf33rd/Source/Game/effect/ng/eff28.h"
 #include "sf33rd/Source/Game/engine/charset.h"
 #include "sf33rd/Source/Game/engine/slowf.h"
 #include "sf33rd/Source/Game/engine/workuser.h"
@@ -47,7 +48,12 @@ void effect_26_move(WORK_Other* ewk) {
             eff26_jp_tbl[ewk->wu.old_rno[2] / 2](ewk);
         }
 
-        disp_pos_trans_entry_rs(ewk);
+        if (AREA_IS_NG(bg_w.bg_index)) {
+            disp_pos_trans_entry_rs_ng(ewk);
+        } else {
+            disp_pos_trans_entry_rs(ewk);
+        }
+
         break;
 
     case 2:
@@ -218,7 +224,7 @@ void eff26_03(WORK_Other* ewk) {
         ewk->wu.disp_flag = 1;
 
     case 4:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             if (ewk->wu.old_rno[2] & 1 && ewk->wu.old_rno[5] > 0) {
                 effect_27_init(ewk, ewk->wu.old_rno[5]);
             }
@@ -275,7 +281,7 @@ void eff26_04(WORK_Other* ewk) {
         /* fallthrough */
 
     case 3:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             ewk->wu.routine_no[1]++;
 
             if (ewk->wu.old_rno[2] & 1 && ewk->wu.old_rno[5] > 0) {
@@ -353,7 +359,7 @@ void eff26_05(WORK_Other* ewk) {
         /* fallthrough */
 
     case 4:
-        if (!eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (!eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             break;
         }
 
@@ -390,10 +396,22 @@ void (*eff26_jp_tbl[6])(WORK_Other*) = { eff26_00, eff26_01, eff26_02, eff26_03,
 
 const s16* scr_obj_data26[1] = { eff26_data_0000 };
 
+// New Generation's data. Colour codes are converted from palette row 0x40 to the PS2 BG palette row 0x12C.
+
+static const s16 ng_eff26_num[2] = { 1, 1 };
+
+static const s16 ng_eff26_data_0000[17] = { 0, 5, 2, 8492, 672, 96, 96, 4, 0, 0, -1, 10, 11, 32, 75, 0, 5 };
+
+/// Sean's stage. The colour code is converted from palette row 0x58 to the PS2 BG palette row 0x144.
+static const s16 ng_eff26_data_0001[17] = { 1, 6, 2, 8516, -304, 55, 78, 18, 0, 1, -1, 19, 4, 19, 19, 0, -1 };
+
+static const s16* const ng_scr_obj_data26[2] = { ng_eff26_data_0000, ng_eff26_data_0001 };
+
 s32 effect_26_init(WORK_Other* oya, s16 type26) {
     WORK_Other* ewk;
     s16 ix;
-    s16 lp_cnt = eff26_num[type26];
+    const bool is_ng = AREA_IS_NG(bg_w.bg_index);
+    s16 lp_cnt = is_ng ? ng_eff26_num[type26] : eff26_num[type26];
     s16 i;
     const s16* data_ptr;
 
@@ -401,7 +419,11 @@ s32 effect_26_init(WORK_Other* oya, s16 type26) {
         return 0;
     }
 
-    for (data_ptr = scr_obj_data26[type26], i = 0; i < lp_cnt; i++) {
+    if (is_ng && type26 == 0) {
+        effect_ng28_init(oya);
+    }
+
+    for (data_ptr = is_ng ? ng_scr_obj_data26[type26] : scr_obj_data26[type26], i = 0; i < lp_cnt; i++) {
         if ((ix = pull_effect_work(4)) == -1) {
             return -1;
         }

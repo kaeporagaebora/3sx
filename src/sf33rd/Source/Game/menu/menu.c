@@ -202,7 +202,10 @@ void Menu_Task(struct _TASK* task_ptr) {
         return;
     }
 
-    if (Interface_Type[0] == 0 || Interface_Type[1] == 0) {
+    // VS mode needs a pad for every human side. A side set to CPU can go without one,
+    // its character is then picked with the other pad (see Sel_PL_Is_Sequential)
+    if ((Interface_Type[0] == 0 && !save_w[1].Partner_Type[0]) ||
+        (Interface_Type[1] == 0 && !save_w[1].Partner_Type[1])) {
         Connect_Status = 0;
     } else {
         Connect_Status = 1;
@@ -328,7 +331,7 @@ void Mode_Select(struct _TASK* task_ptr) {
             Vital_Handicap[ix][1] = 7;
         }
 
-        VS_Stage = 0x14;
+        VS_Stage = VS_STAGE_RANDOM;
         Order[0x8A] = 4;
         Order_Timer[0x8A] = 1;
 
@@ -1365,7 +1368,7 @@ void Load_Replay_Sub(struct _TASK* task_ptr) {
         task_ptr->r_no[3] += 1;
         FadeInit();
         FadeOut(0, 0xFF, 8);
-        Play_Type = 1;
+        Play_Type = PLAY_TYPE_PLAYER_VS_PLAYER;
         Mode_Type = MODE_REPLAY;
         Present_Mode = 3;
         Bonus_Game_Flag = 0;
@@ -1447,7 +1450,7 @@ void Load_Replay_Sub(struct _TASK* task_ptr) {
             Purge_memory_of_kind_of_key(0xC);
             Push_LDREQ_Queue_Player(0, My_char[0]);
             Push_LDREQ_Queue_Player(1, My_char[1]);
-            Push_LDREQ_Queue_BG(bg_w.stage);
+            Push_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area]);
         }
 
         break;
@@ -1460,7 +1463,7 @@ void Load_Replay_Sub(struct _TASK* task_ptr) {
         break;
 
     case 5:
-        if (Check_PL_Load() && Check_LDREQ_Queue_BG(bg_w.stage) && (adx_now_playend() != 0)) {
+        if (Check_PL_Load() && Check_LDREQ_Queue_BG(bg_index_tbl[bg_w.stage][bg_w.area]) && (adx_now_playend() != 0)) {
             task_ptr->r_no[3] += 1;
             Switch_Screen_Init(0);
             init_omop();
@@ -1484,7 +1487,7 @@ void Load_Replay_Sub(struct _TASK* task_ptr) {
             E_No[2] = 0;
             E_No[3] = 0;
 
-            if (plw->wu.operator != 0) {
+            if (plw[0].wu.operator != 0) {
                 Sel_Arts_Complete[0] = -1;
             }
 

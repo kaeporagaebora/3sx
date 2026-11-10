@@ -5,13 +5,19 @@
 
 #include "sf33rd/Source/Game/stage/bg_sub.h"
 #include "common.h"
+#include "sf33rd/Source/Game/effect/effect.h"
 #include "sf33rd/Source/Game/engine/plcnt.h"
 #include "sf33rd/Source/Game/engine/pls02.h"
 #include "sf33rd/Source/Game/engine/workuser.h"
+#include "sf33rd/Source/Game/io/gd3rd.h"
+#include "sf33rd/Source/Game/rendering/texcash.h"
 #include "sf33rd/Source/Game/stage/bg.h"
 #include "sf33rd/Source/Game/stage/bg_data.h"
 #include "sf33rd/Source/Game/stage/ta_sub.h"
+#include "sf33rd/Source/Game/system/ramcnt.h"
 #include "structs.h"
+
+#include <SDL3/SDL.h>
 
 void (*scr_x_mv_jp[35])() = { scr_10_20,   scr_10_21,   scr_10_22,   scr_x_dummy, scr_x_dummy, scr_x_dummy, scr_x_dummy,
                               scr_x_dummy, scr_x_dummy, scr_x_dummy, scr_x_dummy, scr_x_dummy, scr_x_dummy, scr_x_dummy,
@@ -21,7 +27,7 @@ void (*scr_x_mv_jp[35])() = { scr_10_20,   scr_10_21,   scr_10_22,   scr_x_dummy
 
 // Forward decls
 static s16 remake_x_mvstep(s16 mvstep);
-static s32 suzi_offset_set_sub(WORK_Other* ewk);
+static void suzi_offset_set_sub(WORK_Other* ewk);
 
 void check_cg_zoom() {
     s16 i;
@@ -849,7 +855,8 @@ void suzi_offset_set(WORK_Other* ewk) {
     }
 }
 
-static s32 suzi_offset_set_sub(WORK_Other* ewk) {
+/// Remembers the line of the family's layer the object stands on
+static void suzi_offset_set_sub(WORK_Other* ewk) {
     s16 work, work2;
 
     work = ewk->wu.xyz[1].disp.pos & 0x300;
@@ -860,7 +867,7 @@ static s32 suzi_offset_set_sub(WORK_Other* ewk) {
 
     work += work2;
 
-    return 0;
+    ewk->wu.suzi_offset = work;
 }
 
 void suzi_sync_pos_set(WORK_Other* ewk) {
@@ -871,14 +878,62 @@ void suzi_sync_pos_set(WORK_Other* ewk) {
             suzi_offset_set_sub(ewk);
         }
 
-        work = *ewk->wu.suzi_offset;
-        work -= 0x200;
+        work = bg_suzi_line_scroll(ewk->wu.my_family - 1, ewk->wu.suzi_offset);
+        work -= LINE_SCROLL_BASE;
     } else {
         work = 0;
     }
 
     ewk->wu.position_x = ewk->wu.xyz[0].disp.pos - work & 0xFFFF;
     ewk->wu.position_y = ewk->wu.xyz[1].disp.pos & 0xFFFF;
+}
+
+/// How much a line's scroll moves per 16.16 unit of `zuubun * (pos - pos_x_work)`
+static s32 bg_suzi_line_weight(const BGW* bgw, s16 line) {
+    s16 rel;
+
+    if ((line >= 512) && (line < bgw->no_suzi_line)) {
+        line = bgw->start_suzi;
+    }
+
+    rel = line - bgw->start_suzi;
+
+    if (rel < 0) {
+        return 0;
+    }
+
+    if (rel < bgw->u_line) {
+        return rel - bgw->u_line;
+    }
+
+    rel -= bgw->u_line;
+
+    if (rel < bgw->d_line) {
+        return rel;
+    }
+
+    // Lines after the fan repeat its last line
+    return bgw->d_line - 1;
+}
+
+s16 bg_suzi_line_scroll(s16 bgnm, s16 line) {
+    const BGW* bgw = &bg_w.bgw[bgnm];
+    s16 pos;
+    u32 scroll;
+
+    if (bg_line_scroll_tbl[bg_w.bg_index] != NULL) {
+        return bg_line_scroll_tbl[bg_w.bg_index](bgnm, line);
+    }
+
+    if (bg_w.chase_flag & 0xF) {
+        pos = bgw->chase_xy[0].disp.pos;
+    } else {
+        pos = bgw->wxy[0].disp.pos;
+    }
+
+    scroll = (u32)bgw->zuubun * (u32)bg_suzi_line_weight(bgw, line) * (u32)(pos - bgw->pos_x_work);
+    scroll += LINE_SCROLL_BASE << 16;
+    return scroll >> 16;
 }
 
 void Bg_Family_Set() {
@@ -1033,7 +1088,7 @@ void bg_pos_hosei2() {
 }
 
 s16 get_center_position() {
-    if (Bonus_Game_Flag == 0x15) {
+    if (Bonus_Game_Flag == STAGE_3S_BONUS_BALLS) {
         return 0x200;
     }
 
@@ -1064,6 +1119,30 @@ void bg_work_clear() {
         bg_w.bgw[i].r_no_1 = 0;
         bg_w.bgw[i].r_no_2 = 0;
     }
+}
+
+/// @return Whether the area changes. If so, call `bg_next_area_finish` once the resources are loaded.
+bool bg_next_area_begin() {
+    const s16 next_area = SDL_min(bg_w.area + 1, 2);
+
+    if (bg_index_tbl[bg_w.stage][next_area] == bg_index_tbl[bg_w.stage][bg_w.area]) {
+        return false;
+    }
+
+    effect_work_quick_init();
+    purge_texcash_work(7); // Stage objects
+    Bg_Close();
+    Purge_memory_of_kind_of_key(18); // Stage PPG
+    Purge_memory_of_kind_of_key(19); // Stage textures
+
+    bg_w.area = next_area;
+    Push_LDREQ_Queue_Area(bg_index_tbl[bg_w.stage][bg_w.area]);
+    return true;
+}
+
+void bg_next_area_finish() {
+    bg_work_clear();
+    make_texcash_work(7); // Stage objects
 }
 
 void compel_bg_init_position() {
@@ -1101,15 +1180,15 @@ void bg_initialize() {
     const s16* ptr;
     u8 i;
 
-    Bg_Off_R(7);
+    Bg_Off_R(0b111);
     Family_Init();
     Scrn_Pos_Init();
     Zoomf_Init();
-    bg_w.bg_opaque = stage_opaque[bg_w.stage];
     Screen_Switch = 0;
     Screen_Switch_Buffer = 0;
     bg_disp_off = 0;
     bg_w.bg_index = bg_index_tbl[bg_w.stage][bg_w.area];
+    bg_w.bg_opaque = stage_opaque[bg_w.bg_index];
     bg_w.scno = use_scr[bg_w.bg_index];
     bg_w.scrno = use_real_scr[bg_w.bg_index];
     y_sitei_flag = 0;
@@ -1141,6 +1220,7 @@ void bg_initialize() {
 
     bg_w.scr_stop = 0;
     bg_w.frame_flag = 0;
+    bg_w.intro_direction = 0;
     bg_w.bg_f_x = 0x40;
     bg_w.bg_f_y = 0x40;
     bg_w.bg2_sp_x2 = bg_w.bg2_sp_x = 0;
@@ -1164,13 +1244,13 @@ void bg_initialize() {
         bg_w.bgw[i].max_x_limit = bg_w.bgw[i].speed_x * bg_w.max_x;
     }
 
-    if (bg_w.stage != 4) {
+    if (bg_w.stage != STAGE_3S_DUDLEY) {
         base_y_pos = 0x28;
     } else {
         base_y_pos = 0x30;
     }
 
-    if (bg_w.stage > 19) {
+    if (bg_w.stage == STAGE_3S_BONUS_CAR || bg_w.stage == STAGE_3S_BONUS_BALLS) {
         bg_pos_hosei_sub3(2);
         Bg_Family_Set_appoint(2);
     }

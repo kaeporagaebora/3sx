@@ -1,10 +1,14 @@
 #ifndef WORKUSER_H
 #define WORKUSER_H
 
+#include "constants.h"
 #include "sf33rd/Source/Game/engine/cmd_data.h"
 #include "types.h"
 
 #include <stdbool.h>
+
+/// Value of `VS_Stage` that picks a random stage
+#define VS_STAGE_RANDOM STAGE_COUNT
 
 typedef enum ModeType {
     MODE_ARCADE,
@@ -87,7 +91,7 @@ extern s8 Cursor_Timer[2];
 extern s8 Time_Stop;
 extern s8 Suicide[8];
 extern s8 Complete_Face;
-extern u8 Play_Type;
+extern PlayType Play_Type;
 extern s16 Sel_PL_Complete[2];
 extern s8 New_Challenger;
 
@@ -200,7 +204,7 @@ extern s8 Break_Com[2][20];
 extern s8 aiuchi_flag;
 extern u8 paring_counter[2];
 extern u8 paring_bonus_r[2];
-extern u8 paring_ctr_vs[2][2];
+extern u8 paring_ctr_vs[PLAY_TYPE_COUNT][2];
 extern u8 paring_ctr_ori[2];
 extern u8 Attack_Count_Buff[2][4];
 extern u8 Attack_Count_Index[2];
@@ -277,7 +281,7 @@ extern s8 Last_Selected_EM[2];
 extern u8 Q_Country;
 extern u8 Continue_Cut[2];
 extern u8 Introduce_Boss[2][2];
-extern u8 Final_Play_Type[2];
+extern PlayType Final_Play_Type[2];
 extern s8 Rank_In[2][4];
 extern s8 Request_Disp_Rank[2][4];
 extern u8 Reset_Timer[2];
@@ -286,7 +290,7 @@ extern u8 Straight_Flag[2];
 extern u8 kakushi_ix;
 extern u8 kakushi_op;
 extern u8 RO_backup[2];
-extern u8 PT_backup;
+extern PlayType PT_backup;
 extern u8 E_Number[2][4];
 extern u8 E_No[4];
 extern u8 C_No[4];

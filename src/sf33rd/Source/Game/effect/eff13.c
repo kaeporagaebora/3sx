@@ -1029,7 +1029,7 @@ void kotp_07000(WORK_Other* ewk, TAMA* twk) {
         cal_mvxy_speed(&ewk->wu);
         char_move(&ewk->wu);
 
-        if (bg_w.stage == 20) {
+        if (bg_w.stage == STAGE_3S_BONUS_CAR) {
             ewk->wu.vs_id = 7;
         }
 
@@ -1848,7 +1848,7 @@ s32 effect_13_init(WORK* wk, u8 data) {
     ewk = (WORK_Other*)frw[ix];
     write_my_shell_ix(wk, ix);
 
-    if (wk->work_id == 1 && wk->rl_flag == 1 && ((PLW*)wk)->player_number == 0) {
+    if (wk->work_id == 1 && wk->rl_flag == 1 && ((PLW*)wk)->player_number == CHAR_GILL) {
         data++;
     }
 

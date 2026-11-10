@@ -4,10 +4,11 @@
  */
 
 #include "sf33rd/Source/Game/rendering/texgroup_data.h"
+#include "port/io/resource.h"
 
 #define TexGroupData_Empty ((TexGroupData) { 0, -1, 0, 0, 0 })
 
-const TexGroupData texgrpdat[100] = {
+const TexGroupData texgrpdat[TEXGROUP_COUNT] = {
     [0] = TexGroupData_Empty,
     [1] = { .num_of_1st = 0,
             .apfn = 1460,
@@ -448,4 +449,87 @@ const TexGroupData texgrpdat[100] = {
              .to_tex = 0x20B9C,
              .to_chd = 0x0 }, // ef02.bin
     [99] = TexGroupData_Empty,
+
+    // Built from the arcade ROM. The converter pads the trans table to `to_tex`.
+    [100] = { .num_of_1st = 37664,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ALEX_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x3800,
+              .to_chd = 0x0 }, // ng/bg01.bin
+    [101] = { .num_of_1st = 37984,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_EF94),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x28A0,
+              .to_chd = 0x0 }, // ng/ef94.bin
+    [102] = { .num_of_1st = 38176,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_GILL_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x7200,
+              .to_chd = 0x0 }, // ng/bg00.bin
+    [103] = { .num_of_1st = 38414,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_RYU_A_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0xE200,
+              .to_chd = 0x0 }, // ng/bg03.bin
+    [104] = { .num_of_1st = 38878,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_RYU_B_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x3A70,
+              .to_chd = 0x0 }, // ng/bg04.bin
+    [105] = { .num_of_1st = 39194,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_YUN_A_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x8B00,
+              .to_chd = 0x0 }, // ng/bg05.bin
+    [106] = { .num_of_1st = 39656,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_EFC1),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x700,
+              .to_chd = 0x0 }, // ng/efc1.bin
+    [107] = { .num_of_1st = 39685,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_YUN_B_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0xD900,
+              .to_chd = 0x0 }, // ng/bg06.bin
+    [108] = { .num_of_1st = 40629,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_DUDLEY_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x4200,
+              .to_chd = 0x0 }, // ng/bg07.bin
+    [109] = { .num_of_1st = 40805,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_NECRO_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x3300,
+              .to_chd = 0x0 }, // ng/bg09.bin
+    [110] = { .num_of_1st = 41245,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_IBUKI_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x6000,
+              .to_chd = 0x0 }, // ng/bg11.bin
+    [111] = { .num_of_1st = 41632,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ELENA_A_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x7200,
+              .to_chd = 0x0 }, // ng/bg14.bin
+    [112] = { .num_of_1st = 41895,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ELENA_B_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0xA300,
+              .to_chd = 0x0 }, // ng/bg15.bin
+    [113] = { .num_of_1st = 42384,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_ORO_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x3B00,
+              .to_chd = 0x0 }, // ng/bg16.bin
+    [114] = { .num_of_1st = 42825,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_SEAN_OBJECTS),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x10700,
+              .to_chd = 0x0 }, // ng/bg02.bin
+    [115] = { .num_of_1st = 43524,
+              .apfn = RESOURCE_CACHE_FNUM(CACHE_FILE_NG_EF44),
+              .mode = TEXGROUP_MODE_NORMAL,
+              .to_tex = 0x3500,
+              .to_chd = 0x0,
+              .is_8bpp = true }, // ng/ef44.bin
 };

@@ -22,6 +22,25 @@ const s16 eff25_data_0000[16] = { 0, 2, 300, 160, 32, 71, 6, 0, 0, 0, 6, 6, 66, 
 
 const s16* scr_obj_data25[1] = { eff25_data_0000 };
 
+// New Generation's data. Its numbers are also the objects' types, which pick their hitboxes and eff_hit_flag entries.
+// Colour codes are converted from palette row 0x40 to the PS2 BG palette row 0x12C.
+
+static const s16 ng_eff25_data_0000[16] = { 0, 2, 8492, 512, 32, 81, 65, 0, 0, 0, 70, 72, 66, 7, 1, -1 };
+
+static const s16 ng_eff25_data_0001[16] = { 0, 2, 8492, 527, 49, 84, 63, 0, 0, 1, 69, 73, 64, 7, 0, 0 };
+
+static const s16 ng_eff25_data_0002[16] = { 1, 2, 8492, 751, 48, 90, 3, 0, 0, 2, 22, 74, 0, 3, 0, -1 };
+
+// Sean's stage. 0x0004's colour code is converted from palette row 0x40 without the 0x2000 flag to the PS2 row 0x12C.
+
+static const s16 ng_eff25_data_0003[16] = { 1, 2, 8492, 224, 48, 74, 7, 0, 0, -1, 8, 24, 2, 2, 0, 1 };
+
+static const s16 ng_eff25_data_0004[16] = { 0, 2, 300, 512, 16, 20, 9, 0, 0, -1, 10, 23, 23, 6, 1, -1 };
+
+static const s16* const ng_scr_obj_data25[5] = {
+    ng_eff25_data_0000, ng_eff25_data_0001, ng_eff25_data_0002, ng_eff25_data_0003, ng_eff25_data_0004
+};
+
 void (*eff25_jp_tbl[10])(WORK_Other* ewk) = { eff25_00, eff25_00, eff25_02, eff25_02, eff25_04,
                                               eff25_04, eff25_06, eff25_06, eff25_08, eff25_08 };
 
@@ -38,7 +57,12 @@ void effect_25_move(WORK_Other* ewk) {
             eff25_jp_tbl[ewk->wu.old_rno[2]](ewk);
         }
 
-        disp_pos_trans_entry_rs(ewk);
+        if (AREA_IS_NG(bg_w.bg_index)) {
+            disp_pos_trans_entry_rs_ng(ewk);
+        } else {
+            disp_pos_trans_entry_rs(ewk);
+        }
+
         break;
 
     case 1:
@@ -71,7 +95,7 @@ void eff25_00(WORK_Other* ewk) {
         break;
 
     case 1:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             piece_set(ewk);
             set_char_move_init(&ewk->wu, 0, ewk->wu.old_rno[1]);
             ewk->wu.routine_no[1]++;
@@ -115,7 +139,7 @@ void eff25_02(WORK_Other* ewk) {
         break;
 
     case 1:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             piece_set(ewk);
             ewk->wu.routine_no[1]++;
             set_char_move_init(&ewk->wu, 0, ewk->wu.old_rno[1]);
@@ -163,7 +187,7 @@ void eff25_04(WORK_Other* ewk) {
         break;
 
     case 1:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             piece_set(ewk);
             ewk->wu.routine_no[1]++;
             break;
@@ -195,7 +219,7 @@ void eff25_06(WORK_Other* ewk) {
         break;
 
     case 1:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             piece_set(ewk);
             ewk->wu.routine_no[1]++;
             set_char_move_init(&ewk->wu, 0, ewk->wu.old_rno[1]);
@@ -245,7 +269,7 @@ void eff25_08(WORK_Other* ewk) {
         break;
 
     case 1:
-        if (eff_hit_check(ewk, ewk->wu.old_rno[4])) {
+        if (eff_hit_check_area(ewk, ewk->wu.old_rno[4])) {
             piece_set(ewk);
             ewk->wu.routine_no[1]++;
             break;
@@ -284,7 +308,7 @@ void piece_set(WORK_Other* ewk) {
 s32 effect_25_init(s8 num) {
     WORK_Other* ewk;
     s16 ix;
-    const s16* data_ptr = scr_obj_data25[num];
+    const s16* data_ptr = AREA_IS_NG(bg_w.bg_index) ? ng_scr_obj_data25[num] : scr_obj_data25[num];
 
     if ((ix = pull_effect_work(4)) == -1) {
         return -1;

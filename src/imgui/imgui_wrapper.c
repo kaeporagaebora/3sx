@@ -1,6 +1,8 @@
 #if DEBUG && IMGUI
 
 #include "imgui/imgui_wrapper.h"
+#include "arcade/arcade_stage.h"
+#include "constants.h"
 #include "platform/app/sdl/sdl_app.h"
 #include "port/paths.h"
 #include "sf33rd/Source/Game/debug/debug_config.h"
@@ -14,6 +16,67 @@ static const char* const character_names[] = {
     "-",    "Gill", "Alex", "Ryu",   "Yun",   "Dudley",  "Necro",  "Hugo", "Ibuki",  "Elena", "Oro",
     "Yang", "Ken",  "Sean", "Urien", "Akuma", "Chun-Li", "Makoto", "Q",    "Twelve", "Remy",
 };
+
+static const char* const stage_names[] = {
+    "-",
+    "Gill",
+    "Alex",
+    "Ryu",
+    "Yun",
+    "Dudley",
+    "Necro",
+    "Hugo",
+    "Ibuki",
+    "Elena",
+    "Oro",
+    "Yang",
+    "Ken",
+    "Sean",
+    "Urien",
+    "Akuma",
+    "Shin Akuma",
+    "Chun-Li",
+    "Makoto",
+    "Q",
+    "Twelve",
+    "Remy",
+    [STAGE_NG_GILL + 1] = "Gill (NG)",
+    [STAGE_NG_ALEX + 1] = "Alex (NG)",
+    [STAGE_NG_RYU + 1] = "Ryu (NG)",
+    [STAGE_NG_YUN + 1] = "Yun (NG)",
+    [STAGE_NG_DUDLEY + 1] = "Dudley (NG)",
+    [STAGE_NG_NECRO + 1] = "Necro (NG)",
+    [STAGE_NG_IBUKI + 1] = "Ibuki (NG)",
+    [STAGE_NG_ELENA + 1] = "Elena (NG)",
+    [STAGE_NG_ORO + 1] = "Oro (NG)",
+    [STAGE_NG_YANG + 1] = "Yang (NG)",
+    [STAGE_NG_KEN + 1] = "Ken (NG)",
+    [STAGE_NG_SEAN + 1] = "Sean (NG)",
+};
+
+static bool is_stage_available(Stage stage) {
+    switch (stage) {
+    case STAGE_3S_SHIN_AKUMA:
+        return ArcadeStage_IsRomProcessed(ROM_GAME_SFIII3);
+
+    case STAGE_NG_GILL:
+    case STAGE_NG_ALEX:
+    case STAGE_NG_RYU:
+    case STAGE_NG_YUN:
+    case STAGE_NG_DUDLEY:
+    case STAGE_NG_NECRO:
+    case STAGE_NG_IBUKI:
+    case STAGE_NG_ELENA:
+    case STAGE_NG_ORO:
+    case STAGE_NG_YANG:
+    case STAGE_NG_KEN:
+    case STAGE_NG_SEAN:
+        return ArcadeStage_IsRomProcessed(ROM_GAME_SFIII);
+
+    default:
+        return true;
+    }
+}
 
 static const char* const bonus_stage_names[] = { "-", "Destroy the car", "Parry the ball" };
 
@@ -33,6 +96,36 @@ static void plot(const char* label, const float* values, int value_count, int va
     ImGui_PlotLinesEx(
         label, values, value_count, values_offset, overlay, scale.x, scale.y, (ImVec2) { 0, 80 }, sizeof(float)
     );
+}
+
+static void build_stage_override_combo() {
+    if (!ImGui_BeginCombo("##stage_override", stage_names[debug_config.stage_override], 0)) {
+        return;
+    }
+
+    for (int i = 0; i < SDL_arraysize(stage_names); i++) {
+        if (stage_names[i] == NULL) {
+            continue;
+        }
+
+        const bool selected = (i == debug_config.stage_override);
+        const bool available = (i == 0) || is_stage_available(i - 1);
+        const ImGuiSelectableFlags flags = available ? 0 : ImGuiSelectableFlags_Disabled;
+
+        ImGui_PushIDInt(i);
+
+        if (ImGui_SelectableEx(stage_names[i], selected, flags, (ImVec2) { 0, 0 })) {
+            debug_config.stage_override = i;
+        }
+
+        ImGui_PopID();
+
+        if (selected) {
+            ImGui_SetItemDefaultFocus();
+        }
+    }
+
+    ImGui_EndCombo();
 }
 
 static void build_debug_config() {
@@ -62,9 +155,7 @@ static void build_debug_config() {
 
         ImGui_AlignTextToFramePadding();
         ImGui_Text("Stage override:");
-        ImGui_ComboChar(
-            "##stage_override", &debug_config.stage_override, character_names, SDL_arraysize(character_names)
-        );
+        build_stage_override_combo();
 
         ImGui_AlignTextToFramePadding();
         ImGui_Text("Bonus stage override:");

@@ -633,15 +633,15 @@ s32 Check_Limited_Attack(PLW* wk, WORK* em, s16 VS_Technique, u8 PL_Status, s8 S
 
     xx = (em->cg_ix / em->cgd_type);
 
-    if ((((PLW*)em)->player_number == 17) && (VS_Technique == 7)) {
+    if ((((PLW*)em)->player_number == CHAR_Q) && (VS_Technique == 7)) {
         Limit_Number += 1;
     }
 
-    if ((((PLW*)em)->player_number == 10) && (VS_Technique == 7)) {
+    if ((((PLW*)em)->player_number == CHAR_YANG) && (VS_Technique == 7)) {
         Limit_Number += 1;
     }
 
-    if ((((PLW*)em)->player_number == 3) && (VS_Technique == 7)) {
+    if ((((PLW*)em)->player_number == CHAR_YUN) && (VS_Technique == 7)) {
         Limit_Number += 2;
     }
 
@@ -825,6 +825,11 @@ s32 Check_Faint(PLW* wk, PLW* enemy, s16 VS_Technique) {
 
 s32 Check_Blow_Off(PLW* wk, WORK* em, s16 VS_Technique) {
     if (em->routine_no[1] != 1) {
+        return 0;
+    }
+
+    if (em->routine_no[3] == 0) {
+        // Damage reaction hasn't been converted to a damage routine number yet
         return 0;
     }
 
