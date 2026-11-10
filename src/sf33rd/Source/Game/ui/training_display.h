@@ -1,6 +1,7 @@
 /**
  * @file training_display.h
- * Port-only training mode displays: frame advantage, red parry timing, stun timer, guard direction and juggle state.
+ * Port-only training mode displays: frame advantage, red parry timing, stun timer, guard direction, juggle state
+ * and charge meter.
  */
 
 #ifndef TRAINING_DISPLAY_H
@@ -17,6 +18,7 @@ typedef enum TrainingDisplayKind {
     TRAINING_DISPLAY_STUN_TIMER,
     TRAINING_DISPLAY_GUARD_DIRECTION,
     TRAINING_DISPLAY_JUGGLE,
+    TRAINING_DISPLAY_CHARGE,
     TRAINING_DISPLAY_COUNT,
 } TrainingDisplayKind;
 

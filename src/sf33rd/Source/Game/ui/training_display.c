@@ -8,6 +8,7 @@
 #include "sf33rd/Source/Game/ui/training_display.h"
 #include "common.h"
 #include "port/paths.h"
+#include "sf33rd/Source/Game/engine/cmd_main.h"
 #include "sf33rd/Source/Game/engine/plcnt.h"
 #include "sf33rd/Source/Game/engine/slowf.h"
 #include "sf33rd/Source/Game/engine/workuser.h"
@@ -17,6 +18,7 @@
 #include "sf33rd/Source/Game/system/work_sys.h"
 #include "sf33rd/Source/Game/ui/glyph_renderer.h"
 #include "sf33rd/Source/Game/ui/sc_sub.h"
+#include "structs.h"
 
 #include <SDL3/SDL.h>
 
@@ -68,6 +70,7 @@ static const char* const display_names[TRAINING_DISPLAY_COUNT] = {
     [TRAINING_DISPLAY_STUN_TIMER] = "STUN TIMER",
     [TRAINING_DISPLAY_GUARD_DIRECTION] = "GUARD DIRECTION",
     [TRAINING_DISPLAY_JUGGLE] = "JUGGLE STATE",
+    [TRAINING_DISPLAY_CHARGE] = "CHARGE METER",
 };
 
 static bool enabled[TRAINING_DISPLAY_COUNT];
@@ -319,19 +322,93 @@ static bool is_airborne_in_hitstun(const PLW* wk) {
     return wk->wu.routine_no[1] == 1 && wk->wu.routine_no[2] >= 12 && wk->wu.xyz[1].disp.pos > 0;
 }
 
-/// An attack can only connect with a hurtbox, and airborne hit reactions drop them when the juggle window closes.
-static bool has_hurtbox(const PLW* wk) {
-    if (wk->wu.h_bod == NULL || wk->wu.h_han == NULL) {
-        return false;
+/// Remaining juggle time in frames, 0 if there's no limit, or -1 once the window has closed. Each hit on an airborne
+/// player sets `zuru_timer` from `sky_dm_zuru_table` (the System Direction AIR COMBO SKILL picks the row, and every
+/// juggle hit moves further along it). It counts down by 2 a frame outside hitstop, and once it goes negative the
+/// player sets `zuru_flag` and is left out of the hit check, so nothing can hit them until they land.
+static s16 juggle_frames_left(const PLW* wk) {
+    if (wk->zuru_flag || wk->zuru_timer < 0) {
+        return -1;
     }
+
+    return (wk->zuru_timer + 1) / 2;
+}
+
+// Charge meter
+
+#define CHARGE_MAX_DIRECTIONS 4
+#define CHARGE_GAUGE_SCALE 2 // Pixels per frame, like the lua's gauges
+#define CHARGE_GAUGE_HEIGHT 4
+#define CHARGE_WINDOW_HEIGHT 2
+#define CHARGE_ROW_HEIGHT 19
+#define CHARGE_TOP 52
+#define CHARGE_SIDE_MARGIN 60
+
+#define COLOR_GAUGE_BACK 0xA0000000
+#define COLOR_GAUGE_CHARGING 0xFFE0E0E0
+#define COLOR_GAUGE_CHARGED 0xFF40E040
+#define COLOR_GAUGE_WINDOW 0xFF40A0FF
+
+static void draw_rect(s16 x, s16 y, s16 w, s16 h, u32 color) {
+    PAL_CURSOR pc;
+    PAL_CURSOR_P p[4];
+    PAL_CURSOR_COL col[4];
+
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    // Top left, top right, bottom left, bottom right, like the fade quads
+    p[0].x = p[2].x = x;
+    p[1].x = p[3].x = x + w;
+    p[0].y = p[1].y = y;
+    p[2].y = p[3].y = y + h;
 
     for (int i = 0; i < 4; i++) {
-        if (wk->wu.h_bod->body_dm[i][1] != 0 || wk->wu.h_han->hand_dm[i][1] != 0) {
-            return true;
-        }
+        col[i].color = color;
     }
 
-    return false;
+    pc.p = p;
+    pc.col = col;
+    pc.tex = NULL;
+    pc.num = 4;
+    njDrawPolygon2D(&pc, 4, PrioBase[2], 0x60);
+}
+
+static void draw_gauge(s16 x, s16 y, s16 w, s16 h, s16 value, s16 max, u32 color) {
+    draw_rect(x - 1, y - 1, w + 2, h + 2, COLOR_GAUGE_BACK);
+
+    if (max > 0) {
+        draw_rect(x, y, w * SDL_clamp(value, 0, max) / max, h, color);
+    }
+}
+
+static void draw_charge_meter(s16 id) {
+    CmdChargeState states[CHARGE_MAX_DIRECTIONS];
+    const s32 count = cmd_get_charge_states(id, states, CHARGE_MAX_DIRECTIONS);
+    char text[24];
+    s16 y = CHARGE_TOP;
+
+    for (s32 i = 0; i < count; i++) {
+        const CmdChargeState* st = &states[i];
+        const s16 width = st->needed * CHARGE_GAUGE_SCALE;
+        const s16 x = (id == 0) ? CHARGE_SIDE_MARGIN : 384 - CHARGE_SIDE_MARGIN - width;
+        const char* name = (st->lever & 2) ? "DOWN" : "BACK";
+
+        if (st->charged) {
+            SDL_snprintf(text, sizeof(text), "%s  OK  %d", name, st->time_left);
+        } else {
+            SDL_snprintf(text, sizeof(text), "%s  %d", name, st->needed - st->held);
+        }
+
+        SSPutStrPro(0, x, y, 9, st->charged ? COLOR_GREEN : COLOR_WHITE, text);
+        const u32 color = st->charged ? COLOR_GAUGE_CHARGED : COLOR_GAUGE_CHARGING;
+        const s16 window_y = y + 9 + CHARGE_GAUGE_HEIGHT + 2;
+
+        draw_gauge(x, y + 9, width, CHARGE_GAUGE_HEIGHT, st->held, st->needed, color);
+        draw_gauge(x, window_y, width, CHARGE_WINDOW_HEIGHT, st->time_left, st->window, COLOR_GAUGE_WINDOW);
+        y += CHARGE_ROW_HEIGHT;
+    }
 }
 
 // Main entry points
@@ -422,6 +499,10 @@ void TrainingDisplay_Render() {
         const PLW* wk = &plw[i];
         const PlayerDisplay* pd = &players[i];
 
+        if (TrainingDisplay_IsEnabled(TRAINING_DISPLAY_CHARGE)) {
+            draw_charge_meter(i);
+        }
+
         player_label_origin(wk, &x, &y);
 
         if (TrainingDisplay_IsEnabled(TRAINING_DISPLAY_FRAME_ADVANTAGE) && pd->advantage.timer > 0) {
@@ -446,10 +527,15 @@ void TrainingDisplay_Render() {
         }
 
         if (TrainingDisplay_IsEnabled(TRAINING_DISPLAY_JUGGLE) && is_airborne_in_hitstun(wk)) {
-            if (has_hurtbox(wk)) {
+            const s16 left = juggle_frames_left(wk);
+
+            if (left < 0) {
+                draw_centered(x, y, COLOR_BLUE, "NO JUGGLE");
+            } else if (left == 0) {
                 draw_centered(x, y, COLOR_WHITE, "JUGGLE OK");
             } else {
-                draw_centered(x, y, COLOR_BLUE, "NO JUGGLE");
+                SDL_snprintf(text, sizeof(text), "JUGGLE %d", left);
+                draw_centered(x, y, COLOR_WHITE, text);
             }
         }
     }
