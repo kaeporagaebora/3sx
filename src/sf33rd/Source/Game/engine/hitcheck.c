@@ -26,6 +26,7 @@
 #include "sf33rd/Source/Game/engine/workuser.h"
 #include "sf33rd/Source/Game/io/pulpul.h"
 #include "sf33rd/Source/Game/system/sysdir.h"
+#include "sf33rd/Source/Game/ui/training_display.h"
 
 #include <SDL3/SDL.h>
 
@@ -1151,6 +1152,31 @@ void same_dm_stop(WORK* as, WORK* ds) { // 🟢
     }
 }
 
+/// Port-only: tells the training display how far off a failed red parry was. Mirrors the red parry checks in
+/// `defense_ground()` / `defense_sky()`: a parry input counts while its `waza_flag` countdown is at least the
+/// threshold, so a live countdown below it means the input came that many frames too early.
+static void note_red_parry_miss(PLW* ds, s16 flag, s16 threshold, s16 flag2, s16 threshold2) {
+    s16 early = 0;
+
+    if (ds->spmv_ng_flag & DIP_RED_PARRY_DISABLED) {
+        return;
+    }
+
+    if (flag > 0 && flag < threshold) {
+        early = threshold - flag;
+    }
+
+    if (flag2 > 0 && flag2 < threshold2 && (early == 0 || threshold2 - flag2 < early)) {
+        early = threshold2 - flag2;
+    }
+
+    if (early > 0) {
+        TrainingDisplay_NoteRedParryEarly(ds, early);
+    } else {
+        TrainingDisplay_NoteRedParryChance(ds);
+    }
+}
+
 s32 defense_sky(PLW* as, PLW* ds, s8 gddir) { // 🟡
     s8 just_now;
     s8 attr_att;
@@ -1218,6 +1244,11 @@ s32 defense_sky(PLW* as, PLW* ds, s8 gddir) { // 🟡
 
             return 0;
         }
+    }
+
+    if (just_now && !ArcadeBalance_IsEnabled() && ds->py->flag == 0 && !(ds->guard_flag & 2) &&
+        (as->wu.att.guard & 4)) {
+        note_red_parry_miss(ds, ds->cp->waza_flag[5], grdb2[ds->wu.id][attr_att], 0, 0);
     }
 
     if (!(as->wu.att.guard & 32)) {
@@ -1394,6 +1425,16 @@ s32 defense_ground(PLW* as, PLW* ds, s8 gddir) { // 🟡
                 }
             }
         }
+    }
+
+    if (just_now && ds->py->flag == 0 && !(ds->guard_flag & 2) && (as->wu.att.guard & 3)) {
+        note_red_parry_miss(
+            ds,
+            (as->wu.att.guard & 2) ? ds->cp->waza_flag[3] : 0,
+            grdb[ds->wu.id][attr_att][0],
+            (as->wu.att.guard & 1) ? ds->cp->waza_flag[4] : 0,
+            grdb[ds->wu.id][attr_att][1]
+        );
     }
 
     if (!(as->wu.att.guard & 0x18)) {

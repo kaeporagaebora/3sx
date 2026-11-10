@@ -44,6 +44,7 @@
 #include "sf33rd/Source/Game/system/work_sys.h"
 #include "sf33rd/Source/Game/ui/count.h"
 #include "sf33rd/Source/Game/ui/input_history.h"
+#include "sf33rd/Source/Game/ui/training_display.h"
 #include "sf33rd/Source/Game/ui/sc_sub.h"
 
 void Game_Manage_1st();
@@ -403,6 +404,7 @@ void Game_Manage_2_2() {
     grade_check_work_round_init(1);
 
     InputHistory_Clear();
+    TrainingDisplay_Reset();
 }
 
 void Game_Manage_2_3() {

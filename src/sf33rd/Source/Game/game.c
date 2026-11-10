@@ -59,6 +59,7 @@
 #include "sf33rd/Source/Game/ui/count.h"
 #include "sf33rd/Source/Game/ui/flash_lp.h"
 #include "sf33rd/Source/Game/ui/input_history.h"
+#include "sf33rd/Source/Game/ui/training_display.h"
 #include "sf33rd/Source/Game/ui/sc_sub.h"
 #include "sf33rd/Source/PS2/mc/savesub.h"
 #include "structs.h"
@@ -510,6 +511,7 @@ void Game2_1() {
     }
 
     Player_control();
+    TrainingDisplay_Update();
 
     if (Disp_Cockpit) {
         vital_cont_main();
@@ -536,6 +538,8 @@ void Game2_1() {
         if (should_render_input_history()) {
             InputHistory_Render();
         }
+
+        TrainingDisplay_Render();
     }
 
     ppgPurgeFromVRAM(0);

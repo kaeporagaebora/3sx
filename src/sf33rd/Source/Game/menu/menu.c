@@ -66,6 +66,7 @@
 #include "sf33rd/Source/Game/system/work_sys.h"
 #include "sf33rd/Source/Game/ui/count.h"
 #include "sf33rd/Source/Game/ui/sc_sub.h"
+#include "sf33rd/Source/Game/ui/training_display.h"
 #include "sf33rd/Source/PS2/mc/savesub.h"
 #include "structs.h"
 
@@ -87,6 +88,8 @@ static void apply_training_hitbox_display(bool force_off);
 static void start_normal_training(struct _TASK* task_ptr, s16 ix);
 static void tr_stage_select_open();
 static s32 tr_stage_select_move(struct _TASK* task_ptr);
+static void tr_display_menu_open();
+static void tr_display_menu_move(struct _TASK* task_ptr);
 s32 Check_Pad_in_Pause(struct _TASK* task_ptr);
 void Next_Be_Tr_Menu(struct _TASK* task_ptr);
 void Yes_No_Cursor_Exit_Training(struct _TASK* task_ptr, s16 cursor_id);
@@ -3939,6 +3942,70 @@ static s32 tr_stage_select_move(struct _TASK* task_ptr) {
     return 0;
 }
 
+#define TR_DISPLAY_LIST_X 11
+#define TR_DISPLAY_LIST_Y 11
+
+static void tr_display_menu_open() {
+    Menu_Cursor_Y[0] = 0;
+    Menu_Common_Init();
+}
+
+static void tr_display_menu_draw() {
+    char line[40];
+    s16 i;
+    u8 color;
+
+    ToneDown(0x90, 2);
+    SSPutStr2(20, 7, 9, "DISPLAYS");
+
+    for (i = 0; i < TRAINING_DISPLAY_COUNT; i++) {
+        color = (i == Menu_Cursor_Y[0]) ? 5 : 9;
+        SDL_snprintf(
+            line, sizeof(line), "%-20s %s", TrainingDisplay_GetName(i), TrainingDisplay_IsEnabled(i) ? "ON" : "OFF"
+        );
+        SSPutStr2(TR_DISPLAY_LIST_X, TR_DISPLAY_LIST_Y + i * 2, color, line);
+    }
+}
+
+/// Toggles for the port-only training displays.
+static void tr_display_menu_move(struct _TASK* task_ptr) {
+    u16 sw;
+
+    if (Pause_Down) {
+        sw = Check_Menu_Lever(Pause_ID, 0);
+
+        switch (sw) {
+        case SWK_LEFT:
+        case SWK_RIGHT:
+            TrainingDisplay_Toggle(Menu_Cursor_Y[0]);
+            SE_dir_cursor_move();
+            IO_Result = 0;
+            break;
+
+        default:
+            MC_Move_Sub(sw, 0, TRAINING_DISPLAY_COUNT - 1, 0xFF);
+            break;
+        }
+
+        switch (IO_Result) {
+        case SWK_SOUTH:
+            TrainingDisplay_Toggle(Menu_Cursor_Y[0]);
+            SE_selected();
+            break;
+
+        case SWK_EAST:
+        case SWK_START:
+            SE_selected();
+            TrainingDisplay_SaveSettings();
+            Cursor_Y_Pos[0][0] = 3; // Back on DISPLAYS
+            task_ptr->r_no[2] = 1;
+            return;
+        }
+    }
+
+    tr_display_menu_draw();
+}
+
 s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
     s16 ix;
     u16 sw;
@@ -3956,16 +4023,17 @@ s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
             Menu_Suicide[ix] = 0;
         }
 
-        // The STAGE SELECT item is port-only; it moves EXIT down a row.
+        // The STAGE SELECT and DISPLAYS items are port-only; they move EXIT down two rows.
         effect_10_init(0, 6, 0, 0, 0, 20, 12);
         effect_10_init(0, 6, 1, 1, 0, 18, 14);
         effect_10_init(0, 6, 2, 4, 0, 18, 16);
-        effect_10_init(0, 6, 3, 2, 0, 22, 18);
+        effect_10_init(0, 6, 3, 5, 0, 20, 18);
+        effect_10_init(0, 6, 4, 2, 0, 22, 20);
         break;
 
     case 2:
         if (Pause_Down) {
-            IO_Result = MC_Move_Sub(Check_Menu_Lever(Pause_ID, 0), 0, 3, 0xFF);
+            IO_Result = MC_Move_Sub(Check_Menu_Lever(Pause_ID, 0), 0, 4, 0xFF);
         } else {
             sw = ~PLsw[Pause_ID][1] & PLsw[Pause_ID][0];
 
@@ -4003,7 +4071,14 @@ s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
                 task_ptr->r_no[2] = 4;
                 break;
 
-            case 3: // EXIT
+            case 3: // DISPLAYS
+                SE_selected();
+                Menu_Suicide[0] = 1;
+                tr_display_menu_open();
+                task_ptr->r_no[2] = 5;
+                break;
+
+            case 4: // EXIT
                 task_ptr->r_no[2]++;
                 SE_selected();
                 Menu_Suicide[0] = 1;
@@ -4023,13 +4098,17 @@ s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
         sw = ~plsw_01[Pause_ID] & plsw_00[Pause_ID];
 
         if (Pause_Down && Yes_No_Cursor_Move_Sub(task_ptr) == 1) {
-            Cursor_Y_Pos[0][0] = 3; // Back on EXIT, which the port's STAGE SELECT moved down
+            Cursor_Y_Pos[0][0] = 4; // Back on EXIT, which the port's STAGE SELECT and DISPLAYS moved down
         }
 
         break;
 
     case 4:
         return tr_stage_select_move(task_ptr);
+
+    case 5:
+        tr_display_menu_move(task_ptr);
+        break;
     }
 
     return 0;

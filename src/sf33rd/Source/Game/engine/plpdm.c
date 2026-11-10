@@ -5,6 +5,7 @@
 
 #include "sf33rd/Source/Game/engine/plpdm.h"
 #include "arcade/arcade_balance.h"
+#include "sf33rd/Source/Game/ui/training_display.h"
 #include "bin2obj/buttobi.h"
 #include "bin2obj/etc.h"
 #include "common.h"
@@ -316,6 +317,7 @@ void Damage_04000(PLW* wk) {
     case 0:
         wk->wu.routine_no[3]++;
         wk->wu.rl_flag = (wk->wu.dm_rl + 1) & 1;
+        TrainingDisplay_NoteGuard(wk);
 
         if ((wk->wu.dm_quake /= 2) < 4) {
             wk->wu.dm_quake = 4;
@@ -360,6 +362,7 @@ void Damage_07000(PLW* wk) {
     case 0:
         wk->wu.routine_no[3]++;
         wk->wu.rl_flag = (wk->wu.dm_rl + 1) & 1;
+        TrainingDisplay_NoteGuard(wk);
 
         if (remake_initial_speeds(&wk->wu)) {
             wk->wu.routine_no[2] = 5;
