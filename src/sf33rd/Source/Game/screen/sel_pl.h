@@ -18,5 +18,6 @@ s16 Sel_PL_Lead_ID();
 
 /// Decide whether or not to switch to Shin Akuma's stage based on availability and current game mode
 Stage Resolve_Akuma_Stage(Stage stage);
+bool Is_VS_Stage_Selectable(s8 stage);
 
 #endif

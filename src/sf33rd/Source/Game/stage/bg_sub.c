@@ -1140,6 +1140,35 @@ bool bg_next_area_begin() {
     return true;
 }
 
+/// Port-only: stage to switch to at the next round restart, or -1. Set by the training stage select.
+static s16 pending_stage = -1;
+
+void bg_request_stage_change(Stage stage) {
+    pending_stage = stage;
+}
+
+/// Port-only: like `bg_next_area_begin`, but switches to the stage requested with `bg_request_stage_change`.
+/// @return Whether the stage changes. If so, call `bg_next_area_finish` once the resources are loaded.
+bool bg_stage_change_begin() {
+    if (pending_stage < 0) {
+        return false;
+    }
+
+    const Stage stage = pending_stage;
+    pending_stage = -1;
+
+    effect_work_quick_init();
+    purge_texcash_work(7); // Stage objects
+    Bg_Close();
+    Purge_memory_of_kind_of_key(18); // Stage PPG
+    Purge_memory_of_kind_of_key(19); // Stage textures
+
+    Battle_Country = bg_w.stage = stage;
+    bg_w.area = 0;
+    Push_LDREQ_Queue_Area(bg_index_tbl[bg_w.stage][bg_w.area]);
+    return true;
+}
+
 void bg_next_area_finish() {
     bg_work_clear();
     make_texcash_work(7); // Stage objects

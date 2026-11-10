@@ -1,6 +1,7 @@
 #ifndef BG_SUB_H
 #define BG_SUB_H
 
+#include "constants.h"
 #include "structs.h"
 #include "types.h"
 
@@ -44,6 +45,8 @@ s16 get_height_position();
 void bg_work_clear();
 void compel_bg_init_position();
 bool bg_next_area_begin();
+void bg_request_stage_change(Stage stage);
+bool bg_stage_change_begin();
 void bg_next_area_finish();
 void bg_base_move_common();
 void bg_move_common();

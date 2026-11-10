@@ -2004,7 +2004,7 @@ void Handicap_Stage_Select(s16 PL_id) {
     Handicap_Stage_Move_Sub(IO_Result);
 }
 
-static bool Is_VS_Stage_Selectable(s8 stage) {
+bool Is_VS_Stage_Selectable(s8 stage) {
     switch (stage) {
     case STAGE_3S_Q:
     case STAGE_3S_BONUS_CAR:

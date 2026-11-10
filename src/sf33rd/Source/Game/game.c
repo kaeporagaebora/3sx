@@ -644,7 +644,8 @@ void Game2_5() {
         erase_extra_plef_work();
         win_lose_work_clear();
 
-        if (bg_next_area_begin()) {
+        // The stage change is port-only (training stage select); it reuses the area change path.
+        if (bg_stage_change_begin() || bg_next_area_begin()) {
             G_No[3] = 2;
             break;
         }

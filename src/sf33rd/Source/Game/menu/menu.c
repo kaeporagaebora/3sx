@@ -28,6 +28,7 @@
 #include "sf33rd/Source/Game/effect/eff66.h"
 #include "sf33rd/Source/Game/effect/eff75.h"
 #include "sf33rd/Source/Game/effect/eff91.h"
+#include "sf33rd/Source/Game/effect/eff99.h"
 #include "sf33rd/Source/Game/effect/effa0.h"
 #include "sf33rd/Source/Game/effect/effa3.h"
 #include "sf33rd/Source/Game/effect/effa8.h"
@@ -49,6 +50,7 @@
 #include "sf33rd/Source/Game/rendering/mmtmcnt.h"
 #include "sf33rd/Source/Game/rendering/texgroup.h"
 #include "sf33rd/Source/Game/screen/entry.h"
+#include "sf33rd/Source/Game/screen/sel_pl.h"
 #include "sf33rd/Source/Game/sound/se.h"
 #include "sf33rd/Source/Game/sound/sound3rd.h"
 #include "sf33rd/Source/Game/stage/bg.h"
@@ -82,6 +84,9 @@ void Return_VS_Result_Sub(struct _TASK* task_ptr);
 void Exit_Replay_Save(struct _TASK* task_ptr);
 void Setup_NTr_Data(s16 ix);
 static void apply_training_hitbox_display(bool force_off);
+static void start_normal_training(struct _TASK* task_ptr, s16 ix);
+static void tr_stage_select_open();
+static s32 tr_stage_select_move(struct _TASK* task_ptr);
 s32 Check_Pad_in_Pause(struct _TASK* task_ptr);
 void Next_Be_Tr_Menu(struct _TASK* task_ptr);
 void Yes_No_Cursor_Exit_Training(struct _TASK* task_ptr, s16 cursor_id);
@@ -105,6 +110,7 @@ void Training_Menu(struct _TASK* task_ptr);
 void After_Replay(struct _TASK* task_ptr);
 void Wait_Pause_in_Tr(struct _TASK* task_ptr);
 void Reset_Training(struct _TASK* task_ptr);
+void Change_Stage_Training(struct _TASK* task_ptr);
 void Reset_Replay(struct _TASK* task_ptr);
 void End_Replay_Menu(struct _TASK* task_ptr);
 void Mode_Select(struct _TASK* task_ptr);
@@ -186,9 +192,11 @@ typedef struct {
     char* menu;
 } LetterData;
 
-const MenuFunc Menu_Jmp_Tbl[14] = {
+// Entry 14 (Change_Stage_Training) is port-only.
+const MenuFunc Menu_Jmp_Tbl[15] = {
     After_Title,   In_Game,      Wait_Load_Save, Wait_Replay_Check, After_Title,    Suspend_Menu, Wait_Replay_Load,
     Training_Menu, After_Replay, After_Replay,   Wait_Pause_in_Tr,  Reset_Training, Reset_Replay, End_Replay_Menu,
+    Change_Stage_Training,
 };
 
 u8 r_no_plus;
@@ -3612,6 +3620,20 @@ void Wait_Pause_in_Tr(struct _TASK* task_ptr) {
         case 2:
             Next_Be_Tr_Menu(task_ptr);
             break;
+
+        case 4: // Port-only: a stage was picked in the stage select
+            task_ptr->r_no[0] = 14;
+            task_ptr->r_no[1] = 0;
+            task_ptr->r_no[2] = 0;
+            task_ptr->r_no[3] = 0;
+            Allow_a_battle_f = 0;
+
+            for (ix = 0; ix < 4; ix++) {
+                Menu_Suicide[ix] = 1;
+            }
+
+            SsBgmHalfVolume(0);
+            break;
         }
 
         break;
@@ -3767,6 +3789,156 @@ void Flash_1P_or_2P(struct _TASK* task_ptr) {
     }
 }
 
+// Port-only: stage select overlay in the training pause menu.
+
+#define TR_STAGE_ROWS 12
+#define TR_STAGE_LIST_X 15
+#define TR_STAGE_LIST_Y 11
+
+static s8 tr_stage_list[STAGE_COUNT];
+static s16 tr_stage_count;
+static s16 tr_stage_top;
+
+static const char* tr_stage_name(Stage stage) {
+    const char* name = Letter_Data_99[4][stage];
+
+    if (name == NULL || name[0] == '\0') {
+        name = Letter_Data_99[3][stage];
+    }
+
+    return name;
+}
+
+static void tr_stage_put_centered(u16 y, u8 color, const char* str) {
+    const u16 len = SDL_strlen(str);
+    SSPutStr2(len < 48 ? 24 - len / 2 : 0, y, color, str);
+}
+
+static void tr_stage_select_open() {
+    s16 i;
+
+    tr_stage_count = 0;
+    Menu_Cursor_Y[0] = 0;
+
+    for (i = 0; i < STAGE_COUNT; i++) {
+        if (!Is_VS_Stage_Selectable(i)) {
+            continue;
+        }
+
+        if (i == bg_w.stage) {
+            Menu_Cursor_Y[0] = tr_stage_count;
+        }
+
+        tr_stage_list[tr_stage_count++] = i;
+    }
+
+    tr_stage_top = SDL_max(0, Menu_Cursor_Y[0] - TR_STAGE_ROWS / 2);
+    tr_stage_top = SDL_max(0, SDL_min(tr_stage_top, tr_stage_count - TR_STAGE_ROWS));
+    Menu_Common_Init();
+    SsBgmHalfVolume(0); // The music keeps playing at full volume while choosing
+}
+
+static void tr_stage_select_draw() {
+    s16 row;
+    s16 ix;
+    u8 color;
+
+    ToneDown(0x90, 2);
+    SSPutStr2(18, 7, 9, "STAGE SELECT");
+
+    if (tr_stage_top > 0) {
+        SSPutStr2(TR_STAGE_LIST_X, TR_STAGE_LIST_Y - 1, 9, "...");
+    }
+
+    for (row = 0; row < TR_STAGE_ROWS; row++) {
+        ix = tr_stage_top + row;
+
+        if (ix >= tr_stage_count) {
+            break;
+        }
+
+        color = (ix == Menu_Cursor_Y[0]) ? 5 : 9;
+
+        if (tr_stage_list[ix] == bg_w.stage) {
+            SSPutStr2(TR_STAGE_LIST_X - 2, TR_STAGE_LIST_Y + row, color, "*");
+        }
+
+        SSPutStr2(TR_STAGE_LIST_X, TR_STAGE_LIST_Y + row, color, tr_stage_name(tr_stage_list[ix]));
+    }
+
+    if (tr_stage_top + TR_STAGE_ROWS < tr_stage_count) {
+        SSPutStr2(TR_STAGE_LIST_X, TR_STAGE_LIST_Y + TR_STAGE_ROWS, 9, "...");
+    }
+
+    tr_stage_put_centered(TR_STAGE_LIST_Y + TR_STAGE_ROWS + 2, 9, Letter_Data_99[3][tr_stage_list[Menu_Cursor_Y[0]]]);
+}
+
+/// @return 1 to resume on the current stage, 4 once another stage has been requested, otherwise 0.
+static s32 tr_stage_select_move(struct _TASK* task_ptr) {
+    const s16 last = tr_stage_count - 1;
+    u16 sw;
+
+    if (tr_stage_count == 0) {
+        task_ptr->r_no[2] = 1;
+        return 0;
+    }
+
+    if (Pause_Down) {
+        sw = Check_Menu_Lever(Pause_ID, 0);
+
+        switch (sw) {
+        case SWK_LEFT:
+            Menu_Cursor_Y[0] = SDL_max(0, Menu_Cursor_Y[0] - TR_STAGE_ROWS);
+            SE_cursor_move();
+            IO_Result = 0;
+            break;
+
+        case SWK_RIGHT:
+            Menu_Cursor_Y[0] = SDL_min(last, Menu_Cursor_Y[0] + TR_STAGE_ROWS);
+            SE_cursor_move();
+            IO_Result = 0;
+            break;
+
+        default:
+            MC_Move_Sub(sw, 0, last, 0xFF);
+            break;
+        }
+
+        if (Menu_Cursor_Y[0] < tr_stage_top) {
+            tr_stage_top = Menu_Cursor_Y[0];
+        } else if (Menu_Cursor_Y[0] >= tr_stage_top + TR_STAGE_ROWS) {
+            tr_stage_top = Menu_Cursor_Y[0] - TR_STAGE_ROWS + 1;
+        }
+
+        switch (IO_Result) {
+        case SWK_SOUTH:
+            SE_selected();
+
+            if (tr_stage_list[Menu_Cursor_Y[0]] == bg_w.stage) {
+                // Same stage: just resume, like CONTINUE
+                task_ptr->r_no[2] = 0x63;
+                Exit_Menu = 1;
+                Menu_Suicide[0] = 1;
+                return 1;
+            }
+
+            bg_request_stage_change(tr_stage_list[Menu_Cursor_Y[0]]);
+            return 4;
+
+        case SWK_EAST:
+        case SWK_START:
+            SE_selected();
+            SsBgmHalfVolume(1);
+            Cursor_Y_Pos[0][0] = 2; // Back on STAGE SELECT
+            task_ptr->r_no[2] = 1;
+            return 0;
+        }
+    }
+
+    tr_stage_select_draw();
+    return 0;
+}
+
 s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
     s16 ix;
     u16 sw;
@@ -3784,14 +3956,16 @@ s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
             Menu_Suicide[ix] = 0;
         }
 
+        // The STAGE SELECT item is port-only; it moves EXIT down a row.
         effect_10_init(0, 6, 0, 0, 0, 20, 12);
         effect_10_init(0, 6, 1, 1, 0, 18, 14);
-        effect_10_init(0, 6, 2, 2, 0, 22, 16);
+        effect_10_init(0, 6, 2, 4, 0, 18, 16);
+        effect_10_init(0, 6, 3, 2, 0, 22, 18);
         break;
 
     case 2:
         if (Pause_Down) {
-            IO_Result = MC_Move_Sub(Check_Menu_Lever(Pause_ID, 0), 0, 2, 0xFF);
+            IO_Result = MC_Move_Sub(Check_Menu_Lever(Pause_ID, 0), 0, 3, 0xFF);
         } else {
             sw = ~PLsw[Pause_ID][1] & PLsw[Pause_ID][0];
 
@@ -3822,7 +3996,14 @@ s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
                 Cursor_Y_Pos[0][0] = 0;
                 return 2;
 
-            case 2: // EXIT
+            case 2: // STAGE SELECT
+                SE_selected();
+                Menu_Suicide[0] = 1;
+                tr_stage_select_open();
+                task_ptr->r_no[2] = 4;
+                break;
+
+            case 3: // EXIT
                 task_ptr->r_no[2]++;
                 SE_selected();
                 Menu_Suicide[0] = 1;
@@ -3841,17 +4022,21 @@ s32 Pause_in_Normal_Tr(struct _TASK* task_ptr) {
     case 3:
         sw = ~plsw_01[Pause_ID] & plsw_00[Pause_ID];
 
-        if (Pause_Down) {
-            Yes_No_Cursor_Move_Sub(task_ptr);
+        if (Pause_Down && Yes_No_Cursor_Move_Sub(task_ptr) == 1) {
+            Cursor_Y_Pos[0][0] = 3; // Back on EXIT, which the port's STAGE SELECT moved down
         }
 
         break;
+
+    case 4:
+        return tr_stage_select_move(task_ptr);
     }
 
     return 0;
 }
 
-void Reset_Training(struct _TASK* task_ptr) {
+/// Fades out and restarts the training round. Returns true once done, with `task_ptr->r_no` cleared.
+static bool run_training_reset(struct _TASK* task_ptr) {
     s16 ix;
 
     switch (task_ptr->r_no[1]) {
@@ -3915,9 +4100,40 @@ void Reset_Training(struct _TASK* task_ptr) {
             task_ptr->r_no[ix] = 0;
         }
 
-        task_ptr->r_no[0] = 7;
-        break;
+        return true;
     }
+
+    return false;
+}
+
+void Reset_Training(struct _TASK* task_ptr) {
+    if (run_training_reset(task_ptr)) {
+        task_ptr->r_no[0] = 7;
+    }
+}
+
+/// Port-only: restarts the round on the stage picked in the training stage select, then resumes training
+/// directly. Setups other than normal training's play/record/replay modes resume through the training menu.
+void Change_Stage_Training(struct _TASK* task_ptr) {
+    if (!run_training_reset(task_ptr)) {
+        return;
+    }
+
+    if (Mode_Type == MODE_NORMAL_TRAINING && Training_Cursor >= 0 && Training_Cursor <= 2) {
+        // The parts of Training_Init that the training menu would have run
+        End_Training = 0;
+        Demo_Time_Stop = 0;
+        control_player = Champion;
+        Round_num = 0;
+        PL_Wins[0] = 0;
+        PL_Wins[1] = 0;
+        start_normal_training(task_ptr, Training_Cursor);
+        SsBgmHalfVolume(0);
+        return;
+    }
+
+    apply_training_hitbox_display(true);
+    task_ptr->r_no[0] = 7;
 }
 
 void Reset_Replay(struct _TASK* task_ptr) {
@@ -4010,6 +4226,66 @@ void Training_Init(struct _TASK* task_ptr) {
     Replay_Status[1] = 0;
 }
 
+/// Starts normal training in mode `ix` (0 = normal, 1 = record, 2 = replay) and hands control back to
+/// `Wait_Pause_in_Tr`. Shared by the training menu and the port-only stage select.
+static void start_normal_training(struct _TASK* task_ptr, s16 ix) {
+    if (Interface_Type[Champion ^ 1] == 0 && Training[2].contents[0][0][0] == 4) {
+        Training[2].contents[0][0][0] = 0;
+    }
+
+    task_ptr->r_no[0] = 10;
+    task_ptr->r_no[1] = 0;
+    task_ptr->r_no[2] = 0;
+    task_ptr->r_no[3] = 0;
+    Menu_Suicide[0] = 1;
+    Game_pause = 0;
+    Pause_Down = 0;
+    Training_Disp_Work_Clear();
+    CP_No[0][0] = 0;
+    CP_No[1][0] = 0;
+    plw[New_Challenger].wu.operator = 1;
+    Operator_Status[New_Challenger] = 1;
+    Setup_NTr_Data(ix);
+    count_cont_init(0);
+
+    switch (Training[0].contents[0][0][0]) {
+    case 0:
+        control_pl_rno = 0;
+        control_player = New_Challenger;
+        break;
+
+    case 1:
+        control_pl_rno = 1;
+        control_player = New_Challenger;
+        break;
+
+    case 2:
+        control_pl_rno = 2;
+        control_player = New_Challenger;
+        break;
+
+    case 3:
+        control_pl_rno = 99;
+        plw[New_Challenger].wu.operator = 0;
+        Operator_Status[New_Challenger] = 0;
+        break;
+
+    case 4:
+        control_pl_rno = 99;
+        break;
+    }
+
+    All_Clear_Timer();
+    Check_Replay();
+    Training[0].contents[0][1][TRAINING_OPTION_DIFFICULTY] = ix;
+    init_omop();
+    set_init_A4_flag();
+    setup_vitality(&plw[0].wu, My_char[0] + 0);
+    setup_vitality(&plw[1].wu, My_char[1] + 0);
+    Setup_Training_Difficulty();
+    Training_Cursor = ix;
+}
+
 void Normal_Training(struct _TASK* task_ptr) {
     s16 ix;
     s16 x;
@@ -4054,61 +4330,7 @@ void Normal_Training(struct _TASK* task_ptr) {
             case 0:
             case 1:
             case 2:
-                if (Interface_Type[Champion ^ 1] == 0 && Training[2].contents[0][0][0] == 4) {
-                    Training[2].contents[0][0][0] = 0;
-                }
-
-                task_ptr->r_no[0] = 10;
-                task_ptr->r_no[1] = 0;
-                task_ptr->r_no[2] = 0;
-                task_ptr->r_no[3] = 0;
-                Menu_Suicide[0] = 1;
-                Game_pause = 0;
-                Pause_Down = 0;
-                Training_Disp_Work_Clear();
-                CP_No[0][0] = 0;
-                CP_No[1][0] = 0;
-                plw[New_Challenger].wu.operator = 1;
-                Operator_Status[New_Challenger] = 1;
-                Setup_NTr_Data(Menu_Cursor_Y[0]);
-                count_cont_init(0);
-
-                switch (Training[0].contents[0][0][0]) {
-                case 0:
-                    control_pl_rno = 0;
-                    control_player = New_Challenger;
-                    break;
-
-                case 1:
-                    control_pl_rno = 1;
-                    control_player = New_Challenger;
-                    break;
-
-                case 2:
-                    control_pl_rno = 2;
-                    control_player = New_Challenger;
-                    break;
-
-                case 3:
-                    control_pl_rno = 99;
-                    plw[New_Challenger].wu.operator = 0;
-                    Operator_Status[New_Challenger] = 0;
-                    break;
-
-                case 4:
-                    control_pl_rno = 99;
-                    break;
-                }
-
-                All_Clear_Timer();
-                Check_Replay();
-                Training[0].contents[0][1][TRAINING_OPTION_DIFFICULTY] = Menu_Cursor_Y[0];
-                init_omop();
-                set_init_A4_flag();
-                setup_vitality(&plw[0].wu, My_char[0] + 0);
-                setup_vitality(&plw[1].wu, My_char[1] + 0);
-                Setup_Training_Difficulty();
-                Training_Cursor = Menu_Cursor_Y[0];
+                start_normal_training(task_ptr, Menu_Cursor_Y[0]);
                 break;
 
             case 3:
