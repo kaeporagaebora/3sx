@@ -104,8 +104,11 @@ static char* msgSYSDIR_064[1] = { "EX MOVE........................" };
 static char* msgSYSDIR_065[2] = { "Enable/Disable the ability to perform", "EX Moves." };
 static char* msgSYSDIR_066[1] = { "EX MOVE ENERGY REQUIREMENT....." };
 static char* msgSYSDIR_067[2] = { "Adjust the amount of S.A. gauge", "required to perform an EX Move." };
-static char* msgSYSDIR_068[1] = { "" };
-static char* msgSYSDIR_069[1] = { "" };
+static char* msgSYSDIR_068[1] = { "CHARGE TIME PERCENT............" };
+static char* msgSYSDIR_069[2] = {
+    "Shorten the time needed to charge moves,",
+    "as a percentage of the normal time.",
+};
 static char* msgSYSDIR_070[1] = { "" };
 static char* msgSYSDIR_071[1] = { "" };
 static char* msgSYSDIR_072[1] = { "TARGET COMBO..................." };
@@ -208,7 +211,7 @@ static char** msgSysDirAdr[119] = {
 
 static s8 msgSysDirCtr[119] = { 1, 2, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 1, 1, 2, 1, 2, 1, 1,
                                 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1,
-                                1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 1,
+                                1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1,
                                 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2,
                                 1, 2, 1, 2, 1, 2, 1, 2, 1, 1, 1, 2, 1, 2, 1, 2, 1, 1, 1, 2, 1, 1, 1 };
 

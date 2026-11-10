@@ -4,6 +4,25 @@
 #include "structs.h"
 #include "types.h"
 
+/// Port-only: the state of one lever charge direction, for the training charge meter
+typedef struct CmdChargeState {
+    /// Lever bits of the charge direction relative to facing (2 = down, 8 = back)
+    u16 lever;
+    /// Frames held so far, up to `needed`
+    s16 held;
+    /// Frames of holding the charge needs, after the System Direction CHARGE TIME setting
+    s16 needed;
+    /// While charging: frames left before a partial charge is lost. Once charged and released: frames left to do the
+    /// rest of the move. Out of `window`.
+    s16 time_left;
+    s16 window;
+    bool charged;
+} CmdChargeState;
+
+/// Port-only: fills `states` with up to `max` charge directions of the player's moves, merging moves that charge the
+/// same direction. Returns how many were filled.
+s32 cmd_get_charge_states(s16 pl_id, CmdChargeState* states, s32 max);
+
 void waza_check(PLW* pl);
 void key_thru(PLW* pl);
 void cmd_data_set(PLW* /* unused */, s16 i);

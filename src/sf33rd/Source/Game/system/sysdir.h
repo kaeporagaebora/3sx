@@ -97,6 +97,9 @@ extern s16 omop_r_block_ix[2];
 extern s16 omop_b_block_ix[2];
 
 extern s16 omop_otedama_ix[2];
+
+/// Port-only: charge time setting, 0 = 100%, 1 = 75%, 2 = 50%
+extern s16 omop_charge_time_ix[2];
 extern s16 omop_stun_gauge_len[2];
 extern s16 omop_stun_gauge_rcv[2];
 extern s16 omop_stun_gauge_add[2];

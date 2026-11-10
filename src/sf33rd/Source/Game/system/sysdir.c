@@ -17,6 +17,7 @@ s16 omop_stun_gauge_add[2];
 s16 omop_stun_gauge_rcv[2];
 s16 omop_stun_gauge_len[2];
 s16 omop_otedama_ix[2];
+s16 omop_charge_time_ix[2];
 s16 omop_b_block_ix[2];
 s16 omop_r_block_ix[2];
 s16 omop_vital_ix[2];
@@ -289,6 +290,7 @@ void get_system_direction_parameter(SystemDir* sysdir_data) {
     }
 
     omop_use_ex_gauge_ix[0] = sysdir_data->contents[5][3];
+    omop_charge_time_ix[0] = sysdir_data->contents[5][4]; // Port-only
 
     if (sysdir_data->contents[6][0] == 0) {
         omop_spmv_ng_table2[0] |= DIP2_TARGET_COMBO_DISABLED;
@@ -379,4 +381,5 @@ void get_system_direction_parameter(SystemDir* sysdir_data) {
     omop_guard_distance_ix[1] = omop_guard_distance_ix[0];
     omop_use_ex_gauge_ix[1] = omop_use_ex_gauge_ix[0];
     omop_otedama_ix[1] = omop_otedama_ix[0];
+    omop_charge_time_ix[1] = omop_charge_time_ix[0];
 }

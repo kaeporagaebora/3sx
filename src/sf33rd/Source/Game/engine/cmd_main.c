@@ -133,12 +133,33 @@ void cmd_move() { // 🟢
     }
 }
 
+/// Port-only: the System Direction CHARGE TIME setting, as a percentage of each charge command's normal time.
+static const s16 charge_time_percent[3] = { 100, 75, 50 };
+
+/// Scales the hold time of a lever charge command step (type 2, `check_1`). The step completes once its counter drops
+/// below zero, `frames + 1` frames after the charge starts, so that's the length that gets scaled.
+static s16 scale_charge_frames_for(s16 pl_id, s16 type, s16 frames) {
+    s16 ix = omop_charge_time_ix[pl_id];
+    s32 scaled;
+
+    if (type != 2 || frames <= 0 || ix <= 0 || ix >= SDL_arraysize(charge_time_percent)) {
+        return frames;
+    }
+
+    scaled = ((frames + 1) * charge_time_percent[ix] + 50) / 100 - 1;
+    return SDL_max(0, scaled);
+}
+
+static s16 scale_charge_frames(s16 type, s16 frames) {
+    return scale_charge_frames_for(cmd_id, type, frames);
+}
+
 void check_init() { // 🟢
     cmd_tbl_ptr += 12;
     waza_ptr->w_type = *cmd_tbl_ptr++;
     waza_ptr->w_int = *cmd_tbl_ptr++;
-    waza_ptr->free1 = *cmd_tbl_ptr;
-    waza_ptr->free2 = *cmd_tbl_ptr++;
+    waza_ptr->free1 = scale_charge_frames(waza_ptr->w_type, *cmd_tbl_ptr);
+    waza_ptr->free2 = scale_charge_frames(waza_ptr->w_type, *cmd_tbl_ptr++);
     waza_ptr->w_lvr = *cmd_tbl_ptr++;
     waza_ptr->w_ptr = cmd_tbl_ptr;
     waza_ptr->uni0.tame.flag = 0;
@@ -154,8 +175,8 @@ void check_next() { // 🟢
 
     waza_ptr->w_type = *next_ptr++;
     waza_ptr->w_int = *next_ptr++;
-    waza_ptr->free1 = *next_ptr;
-    waza_ptr->free2 = *next_ptr++;
+    waza_ptr->free1 = scale_charge_frames(waza_ptr->w_type, *next_ptr);
+    waza_ptr->free2 = scale_charge_frames(waza_ptr->w_type, *next_ptr++);
     waza_ptr->w_lvr = *next_ptr++;
     waza_ptr->w_ptr = next_ptr;
 
@@ -1781,8 +1802,9 @@ void waza_compel_init(s16 pl_id, s16 num, const intptr_t* adrs) { // 🟢
     w_ptr = &waza_work[pl_id][num];
     w_ptr->w_type = *ptr++;
     w_ptr->w_int = *ptr++;
-    w_ptr->free1 = *ptr;
-    w_ptr->free2 = *ptr++;
+    // Moves restart their follow-up charge through here (waza_flag_clear_only_1), so this is scaled too
+    w_ptr->free1 = scale_charge_frames_for(pl_id, w_ptr->w_type, *ptr);
+    w_ptr->free2 = scale_charge_frames_for(pl_id, w_ptr->w_type, *ptr++);
     w_ptr->w_lvr = *ptr++;
     w_ptr->w_ptr = ptr;
     w_ptr->uni0.tame.flag = 0;
@@ -1873,4 +1895,67 @@ void waza_compel_all_init2(PLW* pl) { // 🟢
 
 u16 processed_lvbt(u16 lv_data) { // 🟡
     return lv_data & 0xFFF;
+}
+
+/// Port-only, for the training charge meter. Reads the command state machines without changing them.
+s32 cmd_get_charge_states(s16 pl_id, CmdChargeState* states, s32 max) {
+    const intptr_t* adrs = get_commands(plw[pl_id].player_number);
+    s32 count = 0;
+    s16 j;
+
+    for (j = 0; j < 56; j++) {
+        const s16* cmd;
+        const WAZA_WORK* w;
+        CmdChargeState state;
+        s32 k;
+
+        if (wcp[pl_id].waza_flag[j] == -1 || adrs[j] == 0) {
+            continue;
+        }
+
+        cmd = (const s16*)adrs[j] + 12;
+
+        if (cmd[0] != 2) {
+            continue; // Every charge move starts with its lever charge step
+        }
+
+        w = &waza_work[pl_id][j];
+        SDL_zero(state);
+        state.lever = cmd[3] & 0xF;
+        state.needed = scale_charge_frames_for(pl_id, 2, cmd[2]) + 1;
+        state.window = cmd[1];
+
+        if (w->w_type == 2) {
+            // check_1 counts free1 down while the lever is held (free2 for 0x8000 levers) and sets tame.flag below 0
+            const s16 counter = (w->w_lvr & 0x8000) ? w->free2 : w->free1;
+
+            state.charged = w->uni0.tame.flag != 0;
+            state.held = state.charged ? state.needed : SDL_clamp(state.needed - 1 - counter, 0, state.needed);
+            state.time_left = SDL_max(0, w->w_int + 1);
+        } else if (w->w_type != 0) {
+            // Charged and released: the rest of the motion is being checked
+            state.charged = true;
+            state.held = state.needed;
+            state.time_left = SDL_max(0, w->w_int + 1);
+            state.window = SDL_max(state.window, state.time_left);
+        }
+
+        for (k = 0; k < count; k++) {
+            if (states[k].lever == state.lever) {
+                break;
+            }
+        }
+
+        if (k == count) {
+            if (count >= max) {
+                continue;
+            }
+
+            states[count++] = state;
+        } else if (state.held > states[k].held || (state.charged && state.time_left > states[k].time_left)) {
+            states[k] = state;
+        }
+    }
+
+    return count;
 }

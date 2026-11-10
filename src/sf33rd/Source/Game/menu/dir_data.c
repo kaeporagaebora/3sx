@@ -7,7 +7,7 @@
 #include "structs.h"
 
 const u8 Dir_Menu_Max_Data[10][7] = { { 1, 1, 1, 3, 1, 3, 2 }, { 1, 1, 3, 1, 1, 2, 0 }, { 1, 1, 1, 1, 1, 1, 2 },
-                                      { 1, 1, 1, 2, 0, 0, 0 }, { 1, 1, 1, 1, 2, 0, 0 }, { 1, 1, 1, 3, 2, 0, 0 },
+                                      { 1, 1, 1, 2, 0, 0, 0 }, { 1, 1, 1, 1, 2, 0, 0 }, { 1, 1, 1, 3, 2, 2, 0 },
                                       { 1, 1, 1, 1, 1, 2, 0 }, { 1, 1, 1, 1, 1, 1, 2 }, { 1, 1, 1, 1, 1, 1, 2 },
                                       { 1, 1, 3, 1, 2, 0, 0 } };
 
@@ -23,7 +23,7 @@ const SystemDir Dir_Default_Data = { .contents = { { 1, 1, 1, 1, 1, 1, 1 },
                                                    { 0, 0, 1, 1, 0, 0, 0 } },
                                      .sum = 0 };
 
-const u8 Page_Data[10] = { 6, 5, 5, 3, 4, 4, 5, 6, 6, 4 };
+const u8 Page_Data[10] = { 6, 5, 5, 3, 4, 5, 5, 6, 6, 4 };
 
 char* Letter_Data_51[10][6][4] = { { { "OFF", "ON", NULL, NULL },
                                      { "OFF", "ON", NULL, NULL },
@@ -59,7 +59,7 @@ char* Letter_Data_51[10][6][4] = { { { "OFF", "ON", NULL, NULL },
                                      { "OFF", "ON", NULL, NULL },
                                      { "OFF", "ON", NULL, NULL },
                                      { "S/#;;;/L", "S/##;;/L", "S/###;/L", "S/####/L" },
-                                     { "OFF", "ON", NULL, NULL },
+                                     { "100", "75", "50", NULL },
                                      { "OFF", "ON", NULL, NULL } },
                                    { { "OFF", "ON", NULL, NULL },
                                      { "OFF", "ON", NULL, NULL },
