@@ -24,6 +24,11 @@ static char* msgEXTRA_016[1] = { "Adjust the Stun Gauge length of Player 1." };
 static char* msgEXTRA_017[1] = { "Adjust the Stun Gauge length of Player 2." };
 static char* msgEXTRA_018[2] = { "Adjust the rate that the Stun Gauge", "increases." };
 static char* msgEXTRA_019[2] = { "Adjust the rate that the Stun Gauge", "recovers." };
+static char* msgEXTRA_020[2] = { "Choose the colors of CPU opponents in", "Arcade mode." };
+static char* msgEXTRA_021[2] = {
+    "Choose the stage of Arcade mode battles.",
+    "RANDOM also uses New Generation stages.",
+};
 static char* msgEXTRA_024[2] = {
     "Show/Erase the screen text display. This",
     "includes the Timer, S.A. Gauge, etc.",
@@ -41,11 +46,11 @@ static char* msgEXTRA_xxx[1] = { "..." };
 static char** msgExtraAdr[35] = { msgEXTRA_000, msgEXTRA_001, msgEXTRA_002, msgEXTRA_003, msgEXTRA_004, msgEXTRA_005,
                                   msgEXTRA_006, msgEXTRA_xxx, msgEXTRA_008, msgEXTRA_009, msgEXTRA_010, msgEXTRA_011,
                                   msgEXTRA_012, msgEXTRA_013, msgEXTRA_014, msgEXTRA_xxx, msgEXTRA_016, msgEXTRA_017,
-                                  msgEXTRA_018, msgEXTRA_019, msgEXTRA_xxx, msgEXTRA_xxx, msgEXTRA_xxx, msgEXTRA_xxx,
+                                  msgEXTRA_018, msgEXTRA_019, msgEXTRA_020, msgEXTRA_021, msgEXTRA_xxx, msgEXTRA_xxx,
                                   msgEXTRA_024, msgEXTRA_025, msgEXTRA_026, msgEXTRA_027, msgEXTRA_028, msgEXTRA_029,
                                   msgEXTRA_xxx, msgEXTRA_xxx, msgEXTRA_100, msgEXTRA_101, msgEXTRA_102 };
 
 static s8 msgExtraCtr[35] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1,
-                              2, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1 };
+                              2, 2, 2, 2, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1 };
 
 MessageTable msgExtraTbl_usa = { msgExtraAdr, msgExtraCtr };

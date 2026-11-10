@@ -6,11 +6,11 @@
 #include "common.h"
 
 const u8 Ex_Menu_Max_Data[4][8] = {
-    { 5, 6, 6, 3, 1, 1, 0, 0 }, { 2, 2, 10, 10, 16, 16, 3, 0 }, { 4, 4, 3, 3, 0, 0, 0, 0 }, { 1, 1, 1, 1, 1, 1, 0, 0 }
+    { 5, 6, 6, 3, 1, 1, 0, 0 }, { 2, 2, 10, 10, 16, 16, 3, 0 }, { 4, 4, 3, 3, 1, 1, 0, 0 }, { 1, 1, 1, 1, 1, 1, 0, 0 }
 };
 
 const u8 Ex_Account_Data[4] = { 0, 8, 16, 24 };
-const u8 Ex_Page_Data[4] = { 7, 7, 4, 6 };
+const u8 Ex_Page_Data[4] = { 7, 7, 6, 6 };
 
 const char* Ex_Letter_Data[4][7][17] = {
     {
@@ -361,8 +361,8 @@ const char* Ex_Letter_Data[4][7][17] = {
             NULL,
         },
         {
-            "",
-            NULL,
+            "DEFAULT",
+            "RANDOM",
             NULL,
             NULL,
             NULL,
@@ -380,8 +380,8 @@ const char* Ex_Letter_Data[4][7][17] = {
             NULL,
         },
         {
-            "",
-            NULL,
+            "DEFAULT",
+            "RANDOM",
             NULL,
             NULL,
             NULL,
@@ -579,8 +579,8 @@ const char* Ex_Title_Data[4][7] = {
         "2P STUN GAUGE LENGTH/........",
         "STUN GAUGE INCREASE SPEED/...",
         "STUN GAUGE RECOVERY SPEED/...",
-        NULL,
-        NULL,
+        "CPU COLOR/...................",
+        "ARCADE STAGE/................",
         NULL,
     },
     {

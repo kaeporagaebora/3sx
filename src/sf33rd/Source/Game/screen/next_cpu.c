@@ -73,6 +73,8 @@ void Setup_EM_List();
 void Setup_Next_Fighter();
 s8 Setup_Com_Arts();
 void Setup_Com_Color();
+static bool Arcade_Random_Stage_Enabled();
+static s16 Pick_Random_Arcade_Stage();
 void Setup_Regular_OBJ(s16 PL_id);
 void Regular_OBJ_Sub(s16 PL_id, s16 Dir);
 void Setup_History_OBJ();
@@ -1126,6 +1128,10 @@ void Setup_Next_Fighter() {
 
         Battle_Country = Resolve_Akuma_Stage(Battle_Country);
 
+        if (Arcade_Random_Stage_Enabled() && EM_id != CHAR_GILL) {
+            Battle_Country = Pick_Random_Arcade_Stage();
+        }
+
         bg_w.stage = Battle_Country;
     }
 
@@ -1163,8 +1169,64 @@ s8 Setup_Com_Arts() {
     return Stock_Com_Arts[Player_id];
 }
 
+/// Button presses that give each regular colour in Setup_PL_Color (HK falls through to its default case)
+static const u16 com_color_buttons[7] = {
+    SWK_WEST,  SWK_NORTH,       SWK_RIGHT_SHOULDER, SWK_SOUTH, SWK_EAST, SWK_LEFT_SHOULDER,
+    SWK_WEST | SWK_RIGHT_SHOULDER | SWK_EAST,
+};
+
+static bool Arcade_Random_Color_Enabled() {
+    // Bonus stages also call Setup_Com_Color, but their colour isn't rolled so it can't carry over to the next fight
+    if (bg_w.stage == STAGE_3S_BONUS_CAR || bg_w.stage == STAGE_3S_BONUS_BALLS) {
+        return false;
+    }
+
+    return Mode_Type == MODE_ARCADE && save_w[Present_Mode].extra_option.contents[2][4] != 0;
+}
+
+static bool Arcade_Random_Stage_Enabled() {
+    return Mode_Type == MODE_ARCADE && save_w[Present_Mode].extra_option.contents[2][5] != 0;
+}
+
+/// Picks any stage that can be chosen in versus mode, including the New Generation stages when their ROM is loaded.
+static s16 Pick_Random_Arcade_Stage() {
+    s16 stages[STAGE_COUNT];
+    s16 count = 0;
+    s16 i;
+
+    for (i = 0; i < STAGE_COUNT; i++) {
+        if (Is_VS_Stage_Selectable(i)) {
+            stages[count++] = i;
+        }
+    }
+
+    return stages[(random_32() * 32 + random_32()) % count];
+}
+
+/// Rolls one of the 7 regular colours. The roll is kept in Stock_Com_Color, so a rematch after a continue keeps it;
+/// beating the opponent or starting a new game clears it.
+static void Setup_Random_Com_Color() {
+    s16 color = Stock_Com_Color[Player_id];
+
+    if (color < 0 || color >= 7) {
+        do {
+            color = random_16();
+        } while (color >= 14);
+
+        color %= 7;
+        Stock_Com_Color[Player_id] = color;
+    }
+
+    Com_Color_Shot = com_color_buttons[color];
+}
+
 void Setup_Com_Color() {
     Com_Color_Shot = Stock_Com_Color[Player_id];
+
+    if (Arcade_Random_Color_Enabled() && EM_id != CHAR_GILL) {
+        Setup_Random_Com_Color();
+        return;
+    }
 
     if (Break_Com[Player_id][EM_id]) {
         Com_Color_Shot = 1024;
