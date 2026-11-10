@@ -483,6 +483,74 @@ OFF, though upstream now ignores the switch for ground parries in arcade mode.
 
 ---
 
+## 8. The blue and red flash
+
+The parrying character's tint isn't a separate sprite or a colour filter on the player's own sprite.
+The game draws a recoloured copy of the character on top of them, using the **after-image** (残像,
+`zanzou`) system that also draws super trails.
+
+### How it starts
+
+The parry animation runs the `comm_imgs` script command (`charset.c`). That sets
+`image_setup_flag = 2` and `image_data_index = 11` on the player. The player's after-image
+controller (`effect_E5_move`, `effe5.c`) picks this up. If `kind_of_blocking == 2` (a red parry,
+set by `blocking_point_count_up()`), it changes the index to 33. Normal and rapid parries keep 11.
+
+`setup_illusion_data()` then reads the settings from `after_image_data[index]`:
+
+| Field | Blue (11) | Red (33) | Meaning |
+| --- | --- | --- | --- |
+| flags | `0x21` | `0x21` | Copy follows the player's position (`0x20`); drawn at a slightly lower `position_z` (`0x01`); bit `0x10` clear, so it blinks |
+| colour index | 30 | 32 | Row of `after_image_color` |
+| `dmcal_m` / `dmcal_d` | 1 / 2 | 1 / 2 | Spawn a copy every frame; each copy lives 2 frames |
+| duration | 12 | 12 | Controller lifetime in frames |
+| end conditions | `0x03` | `0x03` | End when the 12 frames run out (`0x01`) or when the player's state changes (`0x02`) |
+| bright type | 4 | 0 | Extra colour multiplier (see below) |
+
+### What gets drawn
+
+While the controller is active it spawns an `effect_E7` copy every frame. Each frame, the copy takes
+the player's current animation cell (`cg_number`), facing and position, so it sits exactly over the
+player. Its `extra_col` is set from `after_image_color`, which replaces the palette at draw time
+(`sort_push_request*` in `aboutspr.c`).
+
+The copy has `disp_flag = 2`, so it's drawn only on frames where `(blink_timing + Game_timer)` is
+even. The result is the player sprite alternating between its normal colours and the tinted copy,
+which is the flash you see. `blink_timing` is the player ID, so P1 and P2 blink on opposite frames.
+
+The 12-frame countdown only runs when `EXE_flag == 0`, `Game_pause == 0` and the player's
+`hit_stop <= 0`. The parrier's freeze is negative (see [section 4](#4-the-parry-freeze)), so the
+countdown runs during it. The flash also ends early when the player leaves the parry state.
+
+### The palettes
+
+`ColorRAM` holds 512 palettes of 64 colours. When a character loads, `init_trans_color_ram()`
+(`color3rd.c`) copies palettes from that character's colour file into it:
+
+| Colour file palettes | `ColorRAM` slots (P1 / P2) |
+| --- | --- |
+| Chosen costume colour (0–15) | 0 / 16 |
+| Extra palettes 16–21 | 1–6 / 17–22 |
+| Extra palettes 22–25 | 502–505 / 506–509 |
+
+The parry flash uses two of the extras:
+
+| Flash | `after_image_color` | `ColorRAM` slot (P1 / P2) | Colour file palette |
+| --- | --- | --- | --- |
+| Blue | rows 30–31 | `0x1F8` / `0x1FC` (504 / 508) | 24 |
+| Red | rows 32–33 | `0x001` / `0x011` (1 / 17) | 16 |
+
+These palettes are made by hand for each character, so the copy keeps the sprite's shading
+rather than becoming a flat silhouette. `setup_illusion_data()` also copies the starting palette
+into the ghost palette buffer with `push_color_trans_req()`.
+
+For the blue flash only, bright type 4 multiplies every pixel by a colour from the `bright_type[3]`
+table (`mtrans.c`). The level is `pricol * 3 + 1`, where `pricol` is how far through its 2-frame
+life the copy is. A visible copy is at level 4, which is `0xBBBBFF`: red and green are cut to about 73%
+and blue is left alone, so the result is pushed further toward blue. The red flash has no multiplier.
+
+---
+
 ## Source reference
 
 | What | Where |
@@ -500,3 +568,4 @@ OFF, though upstream now ignores the switch for ground parries in arcade mode.
 | Momentum changes | `pls02.c` `remake_mvxy_PoSB()` (air parry), `remake_mvxy_PoGR()` (parried jump-in) |
 | Blockstun / `guard_chuu` | `plpdm.c` `Damage_04000()`, `Damage_07000()`, `guard_kind` |
 | System Direction switches | `system/sysdir.c` `get_system_direction_parameter()`, `menu/dir_data.c` |
+| Blue / red flash | `charset.c` `comm_imgs()`, `effect/effe5.c` `effect_E5_move()`, `setup_illusion_data()`, `after_image_data`, `after_image_color`, `effect/effe7.c` `effect_E7_move()`, `rendering/color3rd.c` `init_trans_color_ram()`, `rendering/mtrans.c` `bright_type` |
